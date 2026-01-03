@@ -4,20 +4,18 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 
-# Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine
-RUN apk add --no-cache libc6-compat
+# Install Yarn and system dependencies
+RUN apk add --no-cache yarn libc6-compat
 
-COPY package.json package-lock.json ./
+COPY package.json yarn.lock ./
 
-# Improved npm configuration for better reliability
+# Yarn installation with robust settings
 RUN \
-  npm config set registry https://registry.npmjs.org/ && \
-  npm config set fetch-retries 10 && \
-  npm config set fetch-retry-mintimeout 60000 && \
-  npm config set fetch-retry-maxtimeout 300000 && \
-  npm cache clean --force && \
-  # Use npm install with --prefer-offline for better error recovery
-  npm install --no-audit --no-fund --prefer-offline
+  yarn config set network-timeout 300000 && \
+  yarn config set fetch-retries 10 && \
+  yarn config set fetch-retry-mintimeout 60000 && \
+  yarn config set fetch-retry-maxtimeout 300000 && \
+  yarn install --frozen-lockfile --network-concurrency 10
 
 # =========================
 # Stage 2: Build
@@ -28,11 +26,11 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Next.js collects completely anonymous telemetry data about general usage.
-# Learn more here: https://nextjs.org/telemetry
+# Next.js telemetry disabled
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN npm run build
+# Build the Next.js application
+RUN yarn build
 
 # =========================
 # Stage 3: Runtime
@@ -43,17 +41,17 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Create non-root user
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 COPY --from=build /app/public ./public
 
-# Set the correct permission for prerender cache
+# Set up .next directory with proper permissions
 RUN mkdir .next
 RUN chown nextjs:nodejs .next
 
-# Automatically leverage output traces to reduce image size
-# https://nextjs.org/docs/advanced-features/output-file-tracing
+# Copy standalone Next.js output
 COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
 
@@ -64,6 +62,5 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# server.js is created by next build from the standalone output
-# https://nextjs.org/docs/pages/api-reference/next-config-js/output
+# Start the Next.js server
 CMD ["node", "server.js"]
