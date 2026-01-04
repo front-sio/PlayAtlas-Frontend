@@ -63,7 +63,16 @@ const FinanceDashboard: React.FC = () => {
   });
 
   // Check if user is finance officer/admin
-  const isFinanceOfficer = session?.user?.role === 'admin' || session?.user?.role === 'finance_officer';
+  const isFinanceOfficer = [
+    'admin',
+    'super_admin',
+    'superuser',
+    'superadmin',
+    'finance_officer',
+    'finance_manager',
+    'manager',
+    'director'
+  ].includes(session?.user?.role || '');
 
   useEffect(() => {
     if (!isFinanceOfficer) {
