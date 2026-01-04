@@ -144,10 +144,13 @@ const DashboardPage: React.FC = () => {
           try {
             profileEnsuredRef.current = true;
             await playerApi.createOrUpdatePlayer({ playerId, username: fallbackUsername });
-            toast({
-              title: 'Profile created',
-              description: 'We set up your player profile so stats can load.',
-            });
+            if (typeof window !== 'undefined' && !sessionStorage.getItem('playerProfileCreatedToast')) {
+              sessionStorage.setItem('playerProfileCreatedToast', 'true');
+              toast({
+                title: 'Profile created',
+                description: 'We set up your player profile so stats can load.',
+              });
+            }
             const retry = await playerApi.getStats(playerId, accessToken);
             if (!cancelled) {
               setStats(retry?.data || null);
@@ -260,10 +263,13 @@ const DashboardPage: React.FC = () => {
         try {
           profileEnsuredRef.current = true;
           await playerApi.createOrUpdatePlayer({ playerId, username: fallbackUsername });
-          toast({
-            title: 'Profile created',
-            description: 'We set up your player profile so stats can load.',
-          });
+          if (typeof window !== 'undefined' && !sessionStorage.getItem('playerProfileCreatedToast')) {
+            sessionStorage.setItem('playerProfileCreatedToast', 'true');
+            toast({
+              title: 'Profile created',
+              description: 'We set up your player profile so stats can load.',
+            });
+          }
           socket.emit('player:stats:request', { playerId });
           return;
         } catch (ensureErr) {
