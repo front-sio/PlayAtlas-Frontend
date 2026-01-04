@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { Activity, Flame, Target, Trophy, TrendingUp } from 'lucide-react';
 import { PageLoader } from '@/components/ui/page-loader';
 import { lookupApi, playerApi, tournamentApi } from '@/lib/apiService';
 import { useSocket } from '@/hooks/useSocket';
+import { toast } from '@/hooks/use-toast';
 
 type PlayerStats = {
   totalMatches?: number;
@@ -71,9 +72,11 @@ const DashboardPage: React.FC = () => {
   const [opponentNames, setOpponentNames] = useState<Record<string, string>>({});
   const [tournamentNames, setTournamentNames] = useState<Record<string, string>>({});
   const { socket, isConnected } = useSocket({ enabled: true });
+  const profileEnsuredRef = useRef(false);
 
   const playerId = session?.user?.userId;
   const accessToken = session?.accessToken;
+  const fallbackUsername = session?.user?.username || session?.user?.email?.split('@')[0];
 
   const formattedWinRate = useMemo(() => {
     if (!stats?.winRate && stats?.winRate !== 0) return '—';
@@ -136,8 +139,30 @@ const DashboardPage: React.FC = () => {
         setStats(response?.data || null);
       } catch (err) {
         if (cancelled) return;
-        setStatsError(err instanceof Error ? err.message : 'Failed to load stats');
-        setStats(null);
+        const status = (err as any)?.status;
+        if (status === 404 && !profileEnsuredRef.current && fallbackUsername) {
+          try {
+            profileEnsuredRef.current = true;
+            await playerApi.createOrUpdatePlayer({ playerId, username: fallbackUsername });
+            toast({
+              title: 'Profile created',
+              description: 'We set up your player profile so stats can load.',
+            });
+            const retry = await playerApi.getStats(playerId, accessToken);
+            if (!cancelled) {
+              setStats(retry?.data || null);
+              setStatsError(null);
+            }
+          } catch (ensureErr) {
+            if (!cancelled) {
+              setStatsError(ensureErr instanceof Error ? ensureErr.message : 'Failed to load stats');
+              setStats(null);
+            }
+          }
+        } else {
+          setStatsError(err instanceof Error ? err.message : 'Failed to load stats');
+          setStats(null);
+        }
       } finally {
         if (!cancelled) setStatsLoading(false);
       }
@@ -229,8 +254,24 @@ const DashboardPage: React.FC = () => {
       setStatsError(null);
     };
 
-    const handleStatsError = (payload: { message?: string }) => {
-      setStatsError(payload?.message || 'Failed to load stats');
+    const handleStatsError = async (payload: { message?: string }) => {
+      const message = payload?.message || 'Failed to load stats';
+      if (message.includes('404') && !profileEnsuredRef.current && playerId && fallbackUsername) {
+        try {
+          profileEnsuredRef.current = true;
+          await playerApi.createOrUpdatePlayer({ playerId, username: fallbackUsername });
+          toast({
+            title: 'Profile created',
+            description: 'We set up your player profile so stats can load.',
+          });
+          socket.emit('player:stats:request', { playerId });
+          return;
+        } catch (ensureErr) {
+          setStatsError(ensureErr instanceof Error ? ensureErr.message : 'Failed to load stats');
+          return;
+        }
+      }
+      setStatsError(message);
     };
 
     socket.on('player:stats', handleStats);
