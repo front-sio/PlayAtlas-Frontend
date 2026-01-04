@@ -1,3 +1,4 @@
+// frontend/src/lib/gameSocketService.ts
 import { io, Socket } from 'socket.io-client';
 import { normalizeSocketTarget } from './socket';
 

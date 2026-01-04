@@ -1999,7 +1999,7 @@ export class PoolGameEngine {
     const targetVectorLen = targetVector ? targetVector.len() : 0;
 
     for (const pk of this.pockets) {
-      if (aimPoint && targetVectorLen > 0) {
+      if (aimPoint && targetVector && targetVectorLen > 0) {
         const toPocket = Vec2.sub(new Vec2(pk.x, pk.y), target.pos);
         const angle = Math.abs(this.angleBetween(targetVector, toPocket));
         const dist = toPocket.len();

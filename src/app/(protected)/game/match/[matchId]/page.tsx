@@ -75,7 +75,17 @@ export default function PlayMatchPage() {
 
   const handleState = useCallback((state: GameState) => {
     if (!sessionId) return;
-    gameSocketService.updateState(state);
+    // Transform engine GameState to socket service GameState format
+    const socketState = {
+      balls: state.balls,
+      currentPlayer: state.turn,
+      scores: {
+        [match?.player1Id || '']: state.p1Score,
+        [match?.player2Id || '']: state.p2Score,
+      },
+      turn: state.shotNumber,
+    };
+    gameSocketService.updateState(socketState);
 
     if (state.winner && match && !sentCompleteRef.current) {
       sentCompleteRef.current = true;
