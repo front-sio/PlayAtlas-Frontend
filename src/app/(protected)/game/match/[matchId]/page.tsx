@@ -11,6 +11,7 @@ import { GameState, PoolGameEngine, ShotData } from '@/lib/pool/engine';
 import { io, Socket } from 'socket.io-client';
 import { toast } from 'sonner';
 import { gameSocketService } from '@/lib/gameSocketService';
+import { normalizeSocketTarget } from '@/lib/socket';
 
 type Match = {
   matchId: string;
@@ -44,6 +45,10 @@ export default function PlayMatchPage() {
   const matchmakingSocketUrl = useMemo(
     () => process.env.NEXT_PUBLIC_MATCHMAKING_SERVICE_URL || 'http://localhost:3009',
     []
+  );
+  const matchmakingSocketTarget = useMemo(
+    () => normalizeSocketTarget(matchmakingSocketUrl),
+    [matchmakingSocketUrl]
   );
   const localSide = useMemo(() => {
     if (!match || !playerId) return 'p1';
@@ -191,8 +196,9 @@ export default function PlayMatchPage() {
   useEffect(() => {
     if (!canPlay || !session?.accessToken || !match?.matchId || !playerId) return;
 
-    const s = io(matchmakingSocketUrl, {
-      transports: ['websocket', 'polling'],
+    const s = io(matchmakingSocketTarget.url, {
+      path: matchmakingSocketTarget.path,
+      transports: ['websocket'],
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
@@ -247,7 +253,7 @@ export default function PlayMatchPage() {
       }
       setMatchSocket(null);
     };
-  }, [canPlay, match?.matchId, session?.accessToken, matchmakingSocketUrl, playerId]);
+  }, [canPlay, match?.matchId, session?.accessToken, matchmakingSocketTarget, playerId]);
 
   const markReady = () => {
     if (!matchSocket || !match?.matchId) return;

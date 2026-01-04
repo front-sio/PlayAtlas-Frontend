@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
 import { io, Socket } from 'socket.io-client';
+import { normalizeSocketTarget } from '@/lib/socket';
 
 interface Tournament {
   tournamentId: string;
@@ -96,6 +97,7 @@ export default function TournamentDetailPage() {
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
   const socketUrl = useMemo(() => apiBase.replace(/\/api\/?$/, ''), [apiBase]);
+  const socketTarget = useMemo(() => normalizeSocketTarget(socketUrl), [socketUrl]);
 
   const loadTournamentData = async () => {
     if (!tournamentId) return;
@@ -125,8 +127,9 @@ export default function TournamentDetailPage() {
 
   useEffect(() => {
     if (!tournamentId) return;
-    const s = io(socketUrl, {
-      transports: ['websocket', 'polling'],
+    const s = io(socketTarget.url, {
+      path: socketTarget.path,
+      transports: ['websocket'],
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000
@@ -158,7 +161,7 @@ export default function TournamentDetailPage() {
       s.disconnect();
       socketRef.current = null;
     };
-  }, [tournamentId, socketUrl, session, token]);
+  }, [tournamentId, socketTarget, session, token]);
 
   useEffect(() => {
     const loadWallet = async () => {

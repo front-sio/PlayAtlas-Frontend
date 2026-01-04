@@ -1,4 +1,5 @@
 import { io, Socket } from 'socket.io-client';
+import { normalizeSocketTarget } from './socket';
 
 type GameState = {
   balls: any[];
@@ -51,9 +52,11 @@ class GameSocketService {
     }
 
     const gameServiceUrl = process.env.NEXT_PUBLIC_GAME_SERVICE_URL || 'http://localhost:3006';
+    const { url, path } = normalizeSocketTarget(gameServiceUrl);
 
-    this.socket = io(gameServiceUrl, {
-      transports: ['websocket', 'polling'],
+    this.socket = io(url, {
+      path,
+      transports: ['websocket'],
       reconnection: true,
       reconnectionDelay: this.reconnectDelay,
       reconnectionAttempts: this.maxReconnectAttempts,

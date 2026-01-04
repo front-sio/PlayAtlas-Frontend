@@ -11,6 +11,7 @@ import { tournamentApi, walletApi } from '@/lib/apiService';
 import { useSession } from 'next-auth/react';
 import { PageLoader } from '@/components/ui/page-loader';
 import { io, Socket } from 'socket.io-client';
+import { normalizeSocketTarget } from '../../../lib/socket';
 
 interface Tournament {
   tournamentId: string;
@@ -63,6 +64,7 @@ const TournamentsPage: React.FC = () => {
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
   const socketUrl = useMemo(() => apiBase.replace(/\/api\/?$/, ''), [apiBase]);
+  const socketTarget = useMemo(() => normalizeSocketTarget(socketUrl), [socketUrl]);
 
   useEffect(() => {
     setMounted(true);
@@ -171,8 +173,9 @@ const TournamentsPage: React.FC = () => {
 
   useEffect(() => {
     if (!mounted) return;
-    const s = io(socketUrl, {
-      transports: ['websocket', 'polling'],
+    const s = io(socketTarget.url, {
+      path: socketTarget.path,
+      transports: ['websocket'],
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000
@@ -209,7 +212,7 @@ const TournamentsPage: React.FC = () => {
       s.disconnect();
       socketRef.current = null;
     };
-  }, [mounted, socketUrl, session]);
+  }, [mounted, socketTarget, session]);
 
   useEffect(() => {
     if (!socketConnected || !socketRef.current) return;

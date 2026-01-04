@@ -1,4 +1,5 @@
 import { io, Socket } from 'socket.io-client';
+import { normalizeSocketTarget } from './socket';
 
 type MatchmakingSocketEvents = {
   match_found: { matchId: string; opponentId: string; scheduledTime: Date; round?: number; tournamentId?: string };
@@ -43,9 +44,11 @@ class MatchmakingSocketService {
     }
 
     const matchmakingServiceUrl = process.env.NEXT_PUBLIC_MATCHMAKING_SERVICE_URL || 'http://localhost:3009';
+    const { url, path } = normalizeSocketTarget(matchmakingServiceUrl);
 
-    this.socket = io(matchmakingServiceUrl, {
-      transports: ['websocket', 'polling'],
+    this.socket = io(url, {
+      path,
+      transports: ['websocket'],
       reconnection: true,
       reconnectionDelay: this.reconnectDelay,
       reconnectionAttempts: this.maxReconnectAttempts,
