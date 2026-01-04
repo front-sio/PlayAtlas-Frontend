@@ -609,6 +609,12 @@ export const matchmakingApi = {
     request(`/matchmaking/match/${encodeURIComponent(matchId)}`, { method: 'GET' }),
 };
 
+// -------------------- Lookup API --------------------
+export const lookupApi = {
+  resolveMatchLookups: async (data: { opponentIds: string[]; tournamentIds: string[] }, token?: string) =>
+    request('/lookup/matches', { method: 'POST', token, body: data, json: true })
+};
+
 // -------------------- Backward compatibility exports --------------------
 export const getWalletBalance = async (token: string) => walletApi.getWallet(token);
 export const withdrawFunds = async (token: string, data: any) => walletApi.requestPayout(token, data);

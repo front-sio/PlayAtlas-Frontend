@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Activity, Flame, Target, Trophy, TrendingUp } from 'lucide-react';
 import { PageLoader } from '@/components/ui/page-loader';
-import { playerApi, tournamentApi } from '@/lib/apiService';
+import { lookupApi, playerApi, tournamentApi } from '@/lib/apiService';
 import { useSocket } from '@/hooks/useSocket';
 
 type PlayerStats = {
@@ -26,6 +26,8 @@ type PlayerStats = {
     result?: string;
     pointsChange?: number;
     playedAt?: string;
+    tournamentId?: string;
+    matchData?: Record<string, any>;
   }>;
 };
 
@@ -66,6 +68,8 @@ const DashboardPage: React.FC = () => {
   const [seasonsByTournament, setSeasonsByTournament] = useState<Record<string, Season[]>>({});
   const [seasonsError, setSeasonsError] = useState<string | null>(null);
   const [tournamentsLoading, setTournamentsLoading] = useState(false);
+  const [opponentNames, setOpponentNames] = useState<Record<string, string>>({});
+  const [tournamentNames, setTournamentNames] = useState<Record<string, string>>({});
   const { socket, isConnected } = useSocket({ enabled: true });
 
   const playerId = session?.user?.userId;
@@ -169,6 +173,53 @@ const DashboardPage: React.FC = () => {
       cancelled = true;
     };
   }, [playerId]);
+
+  useEffect(() => {
+    if (!stats?.recentMatches?.length) return;
+    let cancelled = false;
+
+    const loadLookups = async () => {
+      const recent = stats.recentMatches.slice(0, 6);
+      const missingOpponents = recent
+        .map((match) => match.opponentId)
+        .filter((id): id is string => !!id && !opponentNames[id]);
+      const missingTournaments = recent
+        .map((match) => match.tournamentId)
+        .filter((id): id is string => !!id && !tournamentNames[id]);
+
+      if (missingOpponents.length === 0 && missingTournaments.length === 0) return;
+
+      try {
+        const response = await lookupApi.resolveMatchLookups(
+          { opponentIds: missingOpponents, tournamentIds: missingTournaments },
+          accessToken
+        );
+        if (cancelled) return;
+        const opponents = response?.data?.opponents || {};
+        const tournaments = response?.data?.tournaments || {};
+
+        if (Object.keys(opponents).length > 0) {
+          setOpponentNames((prev) => ({ ...prev, ...opponents }));
+        }
+        if (Object.keys(tournaments).length > 0) {
+          setTournamentNames((prev) => ({ ...prev, ...tournaments }));
+        }
+      } catch (err) {
+        if (cancelled) return;
+        missingOpponents.forEach((opponentId) => {
+          setOpponentNames((prev) => ({ ...prev, [opponentId]: opponentId.slice(0, 8) }));
+        });
+        missingTournaments.forEach((tournamentId) => {
+          setTournamentNames((prev) => ({ ...prev, [tournamentId]: `Tournament ${tournamentId.slice(0, 6)}` }));
+        });
+      }
+    };
+
+    loadLookups();
+    return () => {
+      cancelled = true;
+    };
+  }, [stats?.recentMatches, opponentNames, tournamentNames, accessToken]);
 
   useEffect(() => {
     if (!socket || !isConnected || !playerId) return;
@@ -423,7 +474,18 @@ const DashboardPage: React.FC = () => {
                 >
                   <div>
                     <p className="text-white">
-                      {match.result ? match.result.toUpperCase() : 'RESULT'} vs {match.opponentId || 'Opponent'}
+                      {match.result ? match.result.toUpperCase() : 'RESULT'} vs{' '}
+                      {match.opponentId
+                        ? opponentNames[match.opponentId] ||
+                          match.matchData?.opponentUsername ||
+                          match.matchData?.opponentName ||
+                          match.opponentId.slice(0, 8)
+                        : 'Opponent'}
+                    </p>
+                    <p className="text-xs text-white/50">
+                      {match.tournamentId
+                        ? tournamentNames[match.tournamentId] || `Tournament ${match.tournamentId.slice(0, 6)}`
+                        : 'Tournament'}
                     </p>
                     <p className="text-xs text-white/50">
                       {match.playedAt ? new Date(match.playedAt).toLocaleString() : 'Time TBD'}
