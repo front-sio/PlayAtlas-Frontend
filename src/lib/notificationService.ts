@@ -39,13 +39,43 @@ class NotificationService {
     this.baseUrl = NOTIFICATION_SERVICE_URL;
   }
 
-  private async getAuthHeaders() {
+  private async getSessionContext() {
     const session = await getSession();
     const token = (session as any)?.accessToken as string | undefined;
+    const userId = (session?.user as any)?.id || (session?.user as any)?.userId;
+    return { session, token, userId };
+  }
+
+  private buildAuthHeaders(token?: string) {
     return {
       'Content-Type': 'application/json',
       ...(token && { Authorization: `Bearer ${token}` })
     };
+  }
+
+  private async fetchWithAuth(url: string, options: RequestInit = {}) {
+    const { token } = await this.getSessionContext();
+    if (!token) {
+      return { response: null, tokenMissing: true };
+    }
+
+    let response = await fetch(url, {
+      ...options,
+      headers: this.buildAuthHeaders(token)
+    });
+
+    if (response.status === 401) {
+      const refreshed = await this.getSessionContext();
+      const refreshedToken = refreshed.token;
+      if (refreshedToken && refreshedToken !== token) {
+        response = await fetch(url, {
+          ...options,
+          headers: this.buildAuthHeaders(refreshedToken)
+        });
+      }
+    }
+
+    return { response, tokenMissing: false };
   }
 
   // Get user notifications
@@ -55,8 +85,7 @@ class NotificationService {
     limit?: number;
     offset?: number;
   }): Promise<{ success: boolean; data: Notification[] }> {
-    const session = await getSession();
-    const userId = (session?.user as any)?.id || (session?.user as any)?.userId;
+    const { userId } = await this.getSessionContext();
 
     if (!userId) {
       console.warn('User not authenticated, returning empty notifications');
@@ -74,12 +103,16 @@ class NotificationService {
       queryParams.append('limit', (params?.limit || 50).toString());
       queryParams.append('offset', (params?.offset || 0).toString());
 
-      const response = await fetch(
+      const { response, tokenMissing } = await this.fetchWithAuth(
         `${this.baseUrl}/user/${userId}?${queryParams.toString()}`,
         {
-          headers: await this.getAuthHeaders()
+          method: 'GET'
         }
       );
+
+      if (tokenMissing || !response) {
+        return { success: true, data: [] };
+      }
 
       return response.json();
     } catch (error) {
@@ -91,10 +124,14 @@ class NotificationService {
   // Mark notification as read
   async markAsRead(notificationId: string): Promise<{ success: boolean; message: string }> {
     try {
-      const response = await fetch(`${this.baseUrl}/${notificationId}/read`, {
-        method: 'PUT',
-        headers: await this.getAuthHeaders()
-      });
+      const { response, tokenMissing } = await this.fetchWithAuth(
+        `${this.baseUrl}/${notificationId}/read`,
+        { method: 'PUT' }
+      );
+
+      if (tokenMissing || !response) {
+        return { success: false, message: 'Not authenticated' };
+      }
 
       return response.json();
     } catch (error) {
@@ -105,8 +142,7 @@ class NotificationService {
 
   // Get notification preferences
   async getPreferences(): Promise<{ success: boolean; data: NotificationPreferences }> {
-    const session = await getSession();
-    const userId = (session?.user as any)?.id || (session?.user as any)?.userId;
+    const { userId } = await this.getSessionContext();
 
     if (!userId) {
       console.warn('User not authenticated, returning default preferences');
@@ -126,12 +162,28 @@ class NotificationService {
     }
 
     try {
-      const response = await fetch(
+      const { response, tokenMissing } = await this.fetchWithAuth(
         `${this.baseUrl}/preferences/${userId}`,
         {
-          headers: await this.getAuthHeaders()
+          method: 'GET'
         }
       );
+
+      if (tokenMissing || !response) {
+        return {
+          success: true,
+          data: {
+            userId: 'unknown',
+            emailEnabled: true,
+            smsEnabled: true,
+            pushEnabled: true,
+            tournamentUpdates: true,
+            matchReminders: true,
+            paymentAlerts: true,
+            marketingEmails: false
+          }
+        };
+      }
 
       return response.json();
     } catch (error) {
@@ -154,8 +206,7 @@ class NotificationService {
 
   // Update notification preferences
   async updatePreferences(preferences: Partial<NotificationPreferences>): Promise<{ success: boolean; data: NotificationPreferences }> {
-    const session = await getSession();
-    const userId = (session?.user as any)?.id || (session?.user as any)?.userId;
+    const { userId } = await this.getSessionContext();
 
     if (!userId) {
       console.warn('User not authenticated, cannot update preferences');
@@ -175,14 +226,29 @@ class NotificationService {
     }
 
     try {
-      const response = await fetch(
+      const { response, tokenMissing } = await this.fetchWithAuth(
         `${this.baseUrl}/preferences/${userId}`,
         {
           method: 'PUT',
-          headers: await this.getAuthHeaders(),
           body: JSON.stringify(preferences)
         }
       );
+
+      if (tokenMissing || !response) {
+        return {
+          success: false,
+          data: {
+            userId: 'unknown',
+            emailEnabled: true,
+            smsEnabled: true,
+            pushEnabled: true,
+            tournamentUpdates: true,
+            matchReminders: true,
+            paymentAlerts: true,
+            marketingEmails: false
+          }
+        };
+      }
 
       return response.json();
     } catch (error) {
@@ -218,11 +284,17 @@ class NotificationService {
       const isBulk = !payload.userId && payload.userIds && payload.userIds.length > 0;
       const endpoint = isBulk ? '/send-bulk' : '/send';
 
-      const response = await fetch(`${this.baseUrl}${endpoint}`, {
-        method: 'POST',
-        headers: await this.getAuthHeaders(),
-        body: JSON.stringify(payload)
-      });
+      const { response, tokenMissing } = await this.fetchWithAuth(
+        `${this.baseUrl}${endpoint}`,
+        {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        }
+      );
+
+      if (tokenMissing || !response) {
+        return { success: false, data: null };
+      }
 
       return response.json();
     } catch (error) {

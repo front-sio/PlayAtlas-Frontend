@@ -76,7 +76,10 @@ const DashboardPage: React.FC = () => {
 
   const playerId = session?.user?.userId;
   const accessToken = session?.accessToken;
-  const fallbackUsername = session?.user?.username || session?.user?.email?.split('@')[0];
+  const fallbackUsername =
+    session?.user?.username ||
+    session?.user?.email?.split('@')[0] ||
+    (playerId ? `player-${playerId.slice(0, 6)}` : undefined);
 
   const formattedWinRate = useMemo(() => {
     if (!stats?.winRate && stats?.winRate !== 0) return '—';
