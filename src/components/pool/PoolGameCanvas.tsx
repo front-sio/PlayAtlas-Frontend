@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { PoolGameEngine, GameState, ShotData } from '@/lib/pool/engine';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ type PoolGameCanvasProps = {
   mode: 'practice' | 'match';
   aiDifficulty?: number;
   fullscreen?: boolean;
+  showWinnerOverlay?: boolean;
   localSide?: 'p1' | 'p2';
   onEngineReady?: (engine: PoolGameEngine) => void;
   onShot?: (shot: ShotData) => void;
@@ -47,6 +48,7 @@ export function PoolGameCanvas({
   mode,
   aiDifficulty = 5,
   fullscreen = false,
+  showWinnerOverlay = true,
   localSide,
   onEngineReady,
   onShot,
@@ -57,6 +59,7 @@ export function PoolGameCanvas({
   const engineRef = useRef<PoolGameEngine | null>(null);
   const [hud, setHud] = useState<Hud | null>(null);
   const [isMobilePortrait, setIsMobilePortrait] = useState(false);
+  const [showFullscreenPrompt, setShowFullscreenPrompt] = useState(false);
   const { data: session } = useSession();
   const onShotRef = useRef<typeof onShot>(onShot);
   const onStateRef = useRef<typeof onState>(onState);
@@ -98,6 +101,26 @@ export function PoolGameCanvas({
       : 'Opponent wins by pocketing the 8-ball.';
   }, [hud, localSide]);
 
+  const requestFullscreen = useCallback(() => {
+    if (!fullscreen) return;
+    const el = containerRef.current as HTMLElement | null;
+    if (!el) return;
+    const doc = document as Document & { fullscreenElement?: Element | null; webkitFullscreenElement?: Element | null };
+    const isFullscreen = !!(doc.fullscreenElement || doc.webkitFullscreenElement);
+    if (isFullscreen) return;
+    const request = (el as HTMLElement & { requestFullscreen?: () => Promise<void>; webkitRequestFullscreen?: () => Promise<void> })
+      .requestFullscreen || (el as any).webkitRequestFullscreen;
+    if (!request) return;
+    try {
+      const result = request.call(el);
+      if (result && typeof (result as Promise<void>).catch === 'function') {
+        (result as Promise<void>).catch(() => undefined);
+      }
+    } catch {
+      // Ignore fullscreen errors.
+    }
+  }, [fullscreen]);
+
   useEffect(() => {
     onShotRef.current = onShot;
   }, [onShot]);
@@ -125,6 +148,7 @@ export function PoolGameCanvas({
     let cancelled = false;
     let resizeObserver: ResizeObserver | null = null;
     let resizeTimeout: NodeJS.Timeout | null = null;
+    let fullscreenChangeHandler: (() => void) | null = null;
 
     const handleResize = () => {
       if (cancelled) return;
@@ -147,6 +171,27 @@ export function PoolGameCanvas({
 
     const onDown = (event: PointerEvent) => {
       if (cancelled) return;
+      // Best-effort fullscreen on first user interaction.
+      if (fullscreen) {
+        const el = containerRef.current as HTMLElement | null;
+        const doc = document as Document & { fullscreenElement?: Element | null; webkitFullscreenElement?: Element | null };
+        const isFullscreen = !!(doc.fullscreenElement || doc.webkitFullscreenElement);
+        if (!isFullscreen && el) {
+          const request = (el as HTMLElement & { requestFullscreen?: () => Promise<void>; webkitRequestFullscreen?: () => Promise<void> })
+            .requestFullscreen || (el as any).webkitRequestFullscreen;
+          if (request) {
+            try {
+              const result = request.call(el);
+              if (result && typeof (result as Promise<void>).catch === 'function') {
+                (result as Promise<void>).catch(() => undefined);
+              }
+              setShowFullscreenPrompt(false);
+            } catch {
+              // Ignore fullscreen errors.
+            }
+          }
+        }
+      }
       try {
         canvas.setPointerCapture(event.pointerId);
       } catch (e) {
@@ -174,6 +219,31 @@ export function PoolGameCanvas({
       engine.onPointerUp();
     };
 
+    const requestInitialFullscreen = () => {
+      if (!fullscreen) return;
+      const el = containerRef.current as HTMLElement | null;
+      if (!el) return;
+      const doc = document as Document & { fullscreenElement?: Element | null; webkitFullscreenElement?: Element | null };
+      const isFullscreen = !!(doc.fullscreenElement || doc.webkitFullscreenElement);
+      if (isFullscreen) return;
+      const request = (el as HTMLElement & { requestFullscreen?: () => Promise<void>; webkitRequestFullscreen?: () => Promise<void> })
+        .requestFullscreen || (el as any).webkitRequestFullscreen;
+      if (!request) return;
+      try {
+        const result = request.call(el);
+        if (result && typeof (result as Promise<void>).catch === 'function') {
+          (result as Promise<void>).catch(() => {
+            setShowFullscreenPrompt(true);
+          });
+          return;
+        }
+        setShowFullscreenPrompt(true);
+      } catch {
+        // Ignore fullscreen errors.
+        setShowFullscreenPrompt(true);
+      }
+    };
+
     const start = async () => {
       try {
         await engine.loadAssets();
@@ -186,6 +256,7 @@ export function PoolGameCanvas({
       engine.start();
       
       handleResize();
+      requestInitialFullscreen();
       
       resizeObserver = new ResizeObserver(handleResize);
       resizeObserver.observe(container);
@@ -207,6 +278,17 @@ export function PoolGameCanvas({
       };
       
       document.addEventListener('keydown', handleKeyPress);
+
+      fullscreenChangeHandler = () => {
+        const doc = document as Document & { fullscreenElement?: Element | null; webkitFullscreenElement?: Element | null };
+        const isFullscreen = !!(doc.fullscreenElement || doc.webkitFullscreenElement);
+        if (isFullscreen) {
+          setShowFullscreenPrompt(false);
+        }
+      };
+
+      document.addEventListener('fullscreenchange', fullscreenChangeHandler);
+      document.addEventListener('webkitfullscreenchange', fullscreenChangeHandler);
     };
 
     start();
@@ -222,6 +304,10 @@ export function PoolGameCanvas({
       canvas.removeEventListener('pointermove', onMove);
       canvas.removeEventListener('pointerup', onUp);
       canvas.removeEventListener('pointerleave', onUp);
+      if (fullscreenChangeHandler) {
+        document.removeEventListener('fullscreenchange', fullscreenChangeHandler);
+        document.removeEventListener('webkitfullscreenchange', fullscreenChangeHandler);
+      }
       // Note: handleKeyPress cleanup handled by component unmount
     };
   }, [mode, aiDifficulty, localSide, onEngineReady]);
@@ -379,10 +465,26 @@ export function PoolGameCanvas({
               </div>
             </div>
           )}
+          {showFullscreenPrompt && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+              <div className="text-center space-y-3 px-6">
+                <div className="text-2xl">⛶</div>
+                <p className="text-sm text-white/80">
+                  Tap to enter fullscreen
+                </p>
+                <Button
+                  onClick={requestFullscreen}
+                  className="bg-white/90 text-black hover:bg-white"
+                >
+                  Go Fullscreen
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Winner overlay */}
-        {hud?.winner && (
+        {showWinnerOverlay && hud?.winner && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/80 backdrop-blur-sm z-20">
             <h2 className="text-2xl font-bold text-white">
               {hud.winner === (localSide || 'p1')
@@ -479,7 +581,7 @@ export function PoolGameCanvas({
           </div>
         )}
       </div>
-      {hud?.winner && (
+      {showWinnerOverlay && hud?.winner && (
         <div className="mt-2 sm:mt-4 flex gap-2">
           <div className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80">
             Winner: {winnerLabel} • {winnerMessage}

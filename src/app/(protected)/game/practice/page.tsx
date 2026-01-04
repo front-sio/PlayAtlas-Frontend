@@ -1,28 +1,84 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Brain, ArrowLeft } from 'lucide-react';
 import { PoolGameCanvas } from '@/components/pool/PoolGameCanvas';
+import { GameState, PoolGameEngine } from '@/lib/pool/engine';
 
 export default function PlayPracticePage() {
   const [aiDifficulty, setAiDifficulty] = useState(3);
   const [gameKey, setGameKey] = useState(0);
+  const pendingStateRef = useRef<GameState | null>(null);
+
+  const storageKey = 'playatlas.practice.state.v1';
+  const maxAgeMs = 6 * 60 * 60 * 1000;
 
   const handleDifficultyChange = (level: number) => {
     setAiDifficulty(level);
     setGameKey(prev => prev + 1);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(storageKey);
+    }
   };
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { savedAt: number; aiDifficulty: number; state: GameState };
+      if (!parsed?.state || !parsed?.savedAt) {
+        localStorage.removeItem(storageKey);
+        return;
+      }
+      if (Date.now() - parsed.savedAt > maxAgeMs) {
+        localStorage.removeItem(storageKey);
+        return;
+      }
+      if (parsed.aiDifficulty && parsed.aiDifficulty !== aiDifficulty) {
+        localStorage.removeItem(storageKey);
+        return;
+      }
+      pendingStateRef.current = parsed.state;
+    } catch {
+      localStorage.removeItem(storageKey);
+    }
+  }, [aiDifficulty]);
+
+  const handleEngineReady = useCallback((engine: PoolGameEngine) => {
+    if (pendingStateRef.current) {
+      engine.applyState(pendingStateRef.current);
+      pendingStateRef.current = null;
+    }
+  }, []);
+
+  const handleState = useCallback((state: GameState) => {
+    if (typeof window === 'undefined') return;
+    if (state.winner) {
+      localStorage.removeItem(storageKey);
+      return;
+    }
+    const payload = { savedAt: Date.now(), aiDifficulty, state };
+    localStorage.setItem(storageKey, JSON.stringify(payload));
+  }, [aiDifficulty]);
 
   const difficultyLabels = ['', 'Beginner', 'Easy', 'Medium', 'Hard', 'Expert'];
 
   return (
     <div className="relative w-full h-full">
       {/* Game Canvas - Fullscreen */}
-      <PoolGameCanvas key={gameKey} mode="practice" aiDifficulty={aiDifficulty} fullscreen />
+      <PoolGameCanvas
+        key={gameKey}
+        mode="practice"
+        aiDifficulty={aiDifficulty}
+        fullscreen
+        onEngineReady={handleEngineReady}
+        onState={handleState}
+      />
       
       {/* Top Controls Overlay */}
       <div className="absolute top-[28%] left-3 right-3 z-30 flex items-center justify-between gap-3">

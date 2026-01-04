@@ -38,9 +38,13 @@ export default function PlayMatchPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [matchmakingConnected, setMatchmakingConnected] = useState(false);
   const [opponentConnected, setOpponentConnected] = useState(false);
+  const [matchResult, setMatchResult] = useState<{ outcome: 'win' | 'lose'; message: string } | null>(null);
+  const [redirectIn, setRedirectIn] = useState<number | null>(null);
   const matchSocketRef = useRef<Socket | null>(null);
   const engineRef = useRef<PoolGameEngine | null>(null);
   const sentCompleteRef = useRef(false);
+  const matchResultRef = useRef(false);
+  const pendingStateRef = useRef<GameState | null>(null);
 
   const matchmakingSocketUrl = useMemo(
     () => process.env.NEXT_PUBLIC_MATCHMAKING_SERVICE_URL || 'http://localhost:3009',
@@ -58,6 +62,10 @@ export default function PlayMatchPage() {
   const handleEngineReady = useCallback((engine: PoolGameEngine) => {
     engineRef.current = engine;
     engine.setLocalSide(localSide);
+    if (pendingStateRef.current) {
+      engine.applyState(pendingStateRef.current);
+      pendingStateRef.current = null;
+    }
   }, [localSide]);
 
   const handleShot = useCallback((shot: ShotData) => {
@@ -78,7 +86,16 @@ export default function PlayMatchPage() {
         seasonId: match.seasonId
       });
     }
-  }, [match, sessionId]);
+
+    if (state.winner && !matchResultRef.current) {
+      matchResultRef.current = true;
+      setMatchResult({
+        outcome: state.winner === localSide ? 'win' : 'lose',
+        message: state.message || (state.winner === localSide ? 'You won the match.' : 'You lost the match.')
+      });
+      setRedirectIn(5);
+    }
+  }, [match, sessionId, localSide]);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -88,6 +105,9 @@ export default function PlayMatchPage() {
 
   useEffect(() => {
     sentCompleteRef.current = false;
+    matchResultRef.current = false;
+    setMatchResult(null);
+    setRedirectIn(null);
   }, [sessionId]);
 
   useEffect(() => {
@@ -97,6 +117,15 @@ export default function PlayMatchPage() {
 
     const unsubAuth = gameSocketService.on('authenticated', () => {
       gameSocketService.joinGame(sessionId);
+    });
+
+    const unsubJoined = gameSocketService.on('game_joined', (data: any) => {
+      if (!data?.gameState) return;
+      if (engineRef.current) {
+        engineRef.current.applyState(data.gameState as GameState);
+      } else {
+        pendingStateRef.current = data.gameState as GameState;
+      }
     });
 
     const unsubGameStart = gameSocketService.on('game_start', () => {
@@ -129,6 +158,7 @@ export default function PlayMatchPage() {
 
     return () => {
       unsubAuth();
+      unsubJoined();
       unsubGameStart();
       unsubAction();
       unsubState();
@@ -192,6 +222,36 @@ export default function PlayMatchPage() {
       run();
     }
   }, [matchId, playerId, status, session?.accessToken]);
+
+  useEffect(() => {
+    if (!matchResult) return;
+    let remaining = 5;
+    setRedirectIn(remaining);
+    const interval = setInterval(() => {
+      remaining -= 1;
+      setRedirectIn(remaining);
+    }, 1000);
+    const timeout = setTimeout(() => {
+      router.push('/game');
+    }, 5000);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, [matchResult, router]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (matchPhase !== 'live' || matchResultRef.current) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [matchPhase]);
 
   useEffect(() => {
     if (!canPlay || !session?.accessToken || !match?.matchId || !playerId) return;
@@ -295,11 +355,26 @@ export default function PlayMatchPage() {
       <PoolGameCanvas
         mode="match"
         fullscreen
+        showWinnerOverlay={false}
         localSide={localSide}
         onEngineReady={handleEngineReady}
         onShot={handleShot}
         onState={handleState}
       />
+
+      {matchResult && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className="text-center space-y-3">
+            <h2 className="text-2xl font-bold text-white">
+              {matchResult.outcome === 'win' ? 'You Win!' : 'You Lost'}
+            </h2>
+            <p className="text-sm text-white/80">{matchResult.message}</p>
+            <p className="text-xs text-white/60">
+              Redirecting to lobby{redirectIn !== null ? ` in ${redirectIn}s` : '...'}
+            </p>
+          </div>
+        </div>
+      )}
       
       {/* Connection status indicator */}
       <div className="absolute top-4 right-4 z-30 flex items-center gap-2 bg-black/60 backdrop-blur-sm rounded-full px-3 py-2">
