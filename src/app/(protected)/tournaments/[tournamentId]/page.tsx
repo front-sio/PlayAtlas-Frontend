@@ -7,7 +7,6 @@ import { useSession } from 'next-auth/react';
 import { tournamentApi, walletApi } from '@/lib/apiService';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/page-loader';
 import { io, Socket } from 'socket.io-client';
 import { normalizeSocketTarget } from '@/lib/socket';
@@ -43,21 +42,6 @@ interface Wallet {
   balance: number;
   walletId: string;
 }
-
-const statusBadgeVariant = (status: string) => {
-  switch (status) {
-    case 'active':
-      return 'default';
-    case 'upcoming':
-      return 'secondary';
-    case 'completed':
-      return 'outline';
-    case 'cancelled':
-      return 'destructive';
-    default:
-      return 'secondary';
-  }
-};
 
 const statusColor = (status: string) => {
   switch (status) {
@@ -186,16 +170,24 @@ export default function TournamentDetailPage() {
     return tournament.tournamentPlayers?.length || 0;
   }, [tournament]);
 
+  const getJoinDisabledReason = (season: Season) => {
+    if (season.status !== 'upcoming') return 'Season not open';
+    if (season.joiningClosed) return 'Joining closed';
+    if (season.hasJoined) return 'Already joined';
+    if (typeof tournament?.maxPlayers === 'number' && typeof season.playerCount === 'number') {
+      if (season.playerCount >= tournament.maxPlayers) return 'Season full';
+    }
+    if (season.startTime) {
+      const startTime = new Date(season.startTime);
+      if (!Number.isNaN(startTime.getTime()) && Date.now() >= startTime.getTime()) {
+        return 'Season started';
+      }
+    }
+    return '';
+  };
+
   const canJoinSeason = (season: Season) => {
-    const now = new Date();
-    const startTime = new Date(season.startTime);
-    const timeUntilStart = startTime.getTime() - now.getTime();
-    const JOINING_CLOSE_MINUTES = 30; // 30 minutes before start
-    
-    return season.status === 'upcoming' && 
-           !season.joiningClosed && 
-           !season.hasJoined &&
-           timeUntilStart > JOINING_CLOSE_MINUTES * 60 * 1000;
+    return getJoinDisabledReason(season) === '';
   };
 
   const handleJoinSeason = async (season: Season) => {
@@ -253,154 +245,186 @@ export default function TournamentDetailPage() {
   }
 
   return (
-    <div className="container mx-auto py-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <Link href="/tournaments" className="text-sm text-muted-foreground hover:text-foreground">
-            Back to tournaments
-          </Link>
-          <h1 className="text-3xl font-semibold mt-2">{tournament.name}</h1>
-          {tournament.description && (
-            <p className="text-sm text-muted-foreground mt-2">{tournament.description}</p>
-          )}
-        </div>
-        <Badge variant={statusBadgeVariant(tournament.status)}>{tournament.status}</Badge>
-      </div>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(20,184,166,0.14),_transparent_55%),radial-gradient(circle_at_30%_40%,_rgba(234,179,8,0.1),_transparent_55%),linear-gradient(180deg,_#0b0f1a_0%,_#070a12_45%,_#06080e_100%)] text-white">
+      <div className="mx-auto max-w-6xl px-4 py-10 space-y-8" style={{ fontFamily: 'var(--font-tournament)' }}>
+        <section className="rounded-3xl border border-white/10 bg-white/5 p-6 sm:p-8 backdrop-blur">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-3">
+              <Link href="/tournaments" className="text-xs uppercase tracking-[0.3em] text-emerald-300/80 hover:text-emerald-200">
+                Back to tournaments
+              </Link>
+              <h1 className="text-4xl sm:text-5xl font-semibold" style={{ fontFamily: 'var(--font-tournament-display)' }}>
+                {tournament.name}
+              </h1>
+              <p className="max-w-2xl text-sm text-white/70">
+                {tournament.description || 'Seasoned play with calibrated match timers and clean bracket progression.'}
+              </p>
+            </div>
+            <Badge className="bg-emerald-500/15 text-emerald-200 border-emerald-500/30">
+              {getStatusLabel(tournament.status)}
+            </Badge>
+          </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Tournament Overview</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 text-sm">
-          <div>
-            <p className="text-muted-foreground">Entry Fee</p>
-            <p className="text-lg font-semibold">TSH {Number(tournament.entryFee).toLocaleString()}</p>
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-xs text-white/60">Entry Fee</p>
+              <p className="mt-2 text-2xl font-semibold">TSH {Number(tournament.entryFee).toLocaleString()}</p>
+              <p className="text-xs text-emerald-200/80">Paid once per season</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-xs text-white/60">Players</p>
+              <p className="mt-2 text-2xl font-semibold">{currentPlayers}/{tournament.maxPlayers}</p>
+              <p className="text-xs text-white/50">Roster capacity</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-xs text-white/60">Stage</p>
+              <p className="mt-2 text-2xl font-semibold">{tournament.stage || 'registration'}</p>
+              <p className="text-xs text-white/50">Current phase</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-xs text-white/60">Start</p>
+              <p className="mt-2 text-lg font-semibold">
+                {tournament.startTime ? new Date(tournament.startTime).toLocaleString() : 'TBD'}
+              </p>
+              <p className="text-xs text-white/50">Local time</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-xs text-white/60">Season Window</p>
+              <p className="mt-2 text-lg font-semibold">
+                {typeof tournament.seasonDuration === 'number'
+                  ? `${Math.round(tournament.seasonDuration / 60)} min`
+                  : 'Adaptive'}
+              </p>
+              <p className="text-xs text-white/50">Auto-scheduled</p>
+            </div>
           </div>
-          <div>
-            <p className="text-muted-foreground">Players</p>
-            <p className="text-lg font-semibold">{currentPlayers}/{tournament.maxPlayers}</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Start Time</p>
-            <p className="text-lg font-semibold">
-              {tournament.startTime ? new Date(tournament.startTime).toLocaleString() : 'TBD'}
-            </p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Stage</p>
-            <p className="text-lg font-semibold">{tournament.stage || 'registration'}</p>
-          </div>
-        </CardContent>
-      </Card>
+        </section>
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Seasons</CardTitle>
-            <span className="text-xs text-muted-foreground">
+        <section className="rounded-3xl border border-white/10 bg-white/5 p-6 sm:p-8">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-amber-200/80">Seasons</p>
+              <h2 className="text-2xl font-semibold" style={{ fontFamily: 'var(--font-tournament-display)' }}>
+                Scheduled Match Flow
+              </h2>
+            </div>
+            <span className="text-xs text-white/50">
               Last updated: {lastUpdated.toLocaleTimeString()}
             </span>
           </div>
-        </CardHeader>
-        <CardContent>
+
           {seasons.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No seasons available yet.</p>
+            <p className="mt-6 text-sm text-white/60">No seasons available yet.</p>
           ) : (
-            <div className="space-y-4">
-              {seasons.map((season) => (
-                <div
-                  key={season.seasonId}
-                  className="space-y-3 rounded border border-border bg-background p-4"
-                >
-                  {/* Season Header */}
-                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-lg font-semibold">Season {season.seasonNumber}</h3>
-                      <Badge className={`${statusColor(season.status)} text-white`}>
-                        {getStatusLabel(season.status)}
-                      </Badge>
-                      {season.hasJoined && (
-                        <Badge className="bg-green-600 text-white">
-                          ✓ You Joined
-                        </Badge>
-                      )}
-                      {season.matchesGenerated && (
-                        <Badge  className="border-purple-500 text-purple-300">
-                          Matches Generated
-                        </Badge>
-                      )}
+            <div className="mt-6 grid gap-4 lg:grid-cols-2">
+              {seasons.map((season) => {
+                const disabledReason = getJoinDisabledReason(season);
+                const showJoin = season.status === 'upcoming';
+                return (
+                  <div
+                    key={season.seasonId}
+                    className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/8 via-white/5 to-transparent p-5"
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-3">
+                          <h3 className="text-lg font-semibold">Season {season.seasonNumber}</h3>
+                          <Badge className={`${statusColor(season.status)} text-white`}>
+                            {getStatusLabel(season.status)}
+                          </Badge>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-white/60">
+                          <span className="rounded-full bg-white/10 px-3 py-1">
+                            {season.playerCount || 0} players
+                          </span>
+                          <span className="rounded-full bg-white/10 px-3 py-1">
+                            Max {tournament.maxPlayers}
+                          </span>
+                          {season.hasJoined && (
+                            <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-emerald-200">
+                              Joined
+                            </span>
+                          )}
+                          {season.matchesGenerated && (
+                            <span className="rounded-full bg-amber-500/20 px-3 py-1 text-amber-200">
+                              Matches ready
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-xs text-white/50">
+                        {season.startTime ? `Starts ${new Date(season.startTime).toLocaleString()}` : 'Start time TBD'}
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Player Count and Progress */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">
-                        {season.playerCount || 0} players joined
-                      </span>
-                      <span className="text-muted-foreground">
-                        Max: {tournament?.maxPlayers || 0}
-                      </span>
+                    <div className="mt-4 space-y-2">
+                      <div className="flex items-center justify-between text-xs text-white/50">
+                        <span>Seat fill</span>
+                        <span>
+                          {Math.round(((season.playerCount || 0) / (tournament.maxPlayers || 1)) * 100)}%
+                        </span>
+                      </div>
+                      <div className="h-2 w-full rounded-full bg-white/10">
+                        <div
+                          className={`h-2 rounded-full transition-all ${
+                            season.hasJoined
+                              ? 'bg-gradient-to-r from-emerald-400 to-emerald-600'
+                              : 'bg-gradient-to-r from-amber-400 to-emerald-400'
+                          }`}
+                          style={{
+                            width: `${Math.min(((season.playerCount || 0) / (tournament.maxPlayers || 1)) * 100, 100)}%`
+                          }}
+                        />
+                      </div>
                     </div>
-                    <div className="w-full bg-gray-700 rounded-full h-2">
-                      <div
-                        className={`h-2 rounded-full transition-all ${
-                          season.hasJoined 
-                            ? 'bg-gradient-to-r from-green-600 to-emerald-600' 
-                            : 'bg-gradient-to-r from-purple-600 to-pink-600'
-                        }`}
-                        style={{ 
-                          width: `${Math.min(((season.playerCount || 0) / (tournament?.maxPlayers || 1)) * 100, 100)}%` 
-                        }}
-                      ></div>
-                    </div>
-                  </div>
 
-                  {/* Time Information */}
-                  <div className="grid grid-cols-1 gap-2 text-sm md:grid-cols-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-muted-foreground">Start:</span>
-                      <span className="font-medium">
-                        {season.startTime ? new Date(season.startTime).toLocaleString() : 'TBD'}
-                      </span>
+                    <div className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                      <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                        <p className="text-xs text-white/60">Start</p>
+                        <p className="mt-1 font-semibold">
+                          {season.startTime ? new Date(season.startTime).toLocaleString() : 'TBD'}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                        <p className="text-xs text-white/60">End</p>
+                        <p className="mt-1 font-semibold">
+                          {season.endTime ? new Date(season.endTime).toLocaleString() : 'TBD'}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-muted-foreground">End:</span>
-                      <span className="font-medium">
-                        {season.endTime ? new Date(season.endTime).toLocaleString() : 'TBD'}
-                      </span>
-                    </div>
-                  </div>
 
-                  {/* Action Button */}
-                  {season.status === 'upcoming' && (
-                    <div className="pt-2">
-                      {season.joiningClosed ? (
-                        <Badge className="bg-yellow-600 text-white">
-                          Joining Closed
-                        </Badge>
-                      ) : season.hasJoined ? (
-                        <Button disabled className="w-full md:w-auto bg-green-600 cursor-default">
-                          ✓ Already Joined
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          disabled={joining === season.seasonId || !canJoinSeason(season)}
-                          onClick={() => handleJoinSeason(season)}
-                          className="w-full md:w-auto bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
-                        >
-                          {joining === season.seasonId ? 'Joining...' : 'Join Season'}
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
+                    {showJoin && (
+                      <div className="mt-4">
+                        {season.hasJoined ? (
+                          <Button disabled className="w-full bg-emerald-600 cursor-default">
+                            ✓ Joined
+                          </Button>
+                        ) : (
+                          <Button
+                            disabled={joining === season.seasonId || !canJoinSeason(season)}
+                            onClick={() => handleJoinSeason(season)}
+                            className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60"
+                          >
+                            {joining === season.seasonId ? 'Joining…' : 'Join Season'}
+                          </Button>
+                        )}
+                        {!season.hasJoined && disabledReason && (
+                          <p className="mt-2 text-xs text-amber-200">{disabledReason}</p>
+                        )}
+                      </div>
+                    )}
+                    {!showJoin && (
+                      <p className="mt-4 text-xs text-white/50">
+                        {season.status === 'completed' ? 'Season finished. Results are locked.' : 'Season is not accepting new entries.'}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </section>
+      </div>
     </div>
   );
 }

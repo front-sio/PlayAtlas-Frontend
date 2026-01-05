@@ -370,346 +370,362 @@ const DashboardPage: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-          <p className="text-white/70">Welcome back</p>
-        </div>
-      </div>
-
-      {/* Success Message */}
-      {searchParams.get('message') && (
-        <Alert className="bg-green-500/10 border-green-500/30 mb-6">
-          <AlertDescription className="text-green-400">
-            {searchParams.get('message')}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-        <Card className="bg-white/5 border-white/10">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-white/70 flex items-center gap-2">
-              <Trophy className="h-4 w-4 text-emerald-300" />
-              Ranking Points
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold text-white">
-              {statsLoading ? '...' : stats?.rankingPoints ?? '—'}
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.12),_transparent_55%),radial-gradient(circle_at_20%_30%,_rgba(59,130,246,0.12),_transparent_55%),linear-gradient(180deg,_#0a0f1b_0%,_#070a13_50%,_#06080f_100%)] text-white">
+      <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
+        <section className="rounded-3xl border border-white/10 bg-white/5 p-6 sm:p-8 backdrop-blur">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-emerald-200/80">Player Dashboard</p>
+              <h1 className="mt-2 text-4xl font-semibold">
+                Welcome back{fallbackUsername ? `, ${fallbackUsername}` : ''}
+              </h1>
+              <p className="mt-2 text-sm text-white/70">
+                Track performance, enter live seasons, and keep momentum between matches.
+              </p>
             </div>
-            <p className="text-xs text-white/50">Climb the ladder with each win.</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white/5 border-white/10">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-white/70 flex items-center gap-2">
-              <Target className="h-4 w-4 text-sky-300" />
-              Win Rate
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold text-white">
-              {statsLoading ? '...' : formattedWinRate}
-            </div>
-            <p className="text-xs text-white/50">
-              {statsLoading ? 'Loading performance...' : `${stats?.matchesWon ?? 0} wins · ${stats?.matchesLost ?? 0} losses`}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white/5 border-white/10">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-white/70 flex items-center gap-2">
-              <Activity className="h-4 w-4 text-amber-300" />
-              Matches Played
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold text-white">
-              {statsLoading ? '...' : stats?.totalMatches ?? '—'}
-            </div>
-            <p className="text-xs text-white/50">Total matches recorded.</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white/5 border-white/10">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-white/70 flex items-center gap-2">
-              <Flame className="h-4 w-4 text-rose-300" />
-              Current Streak
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold text-white">
-              {statsLoading ? '...' : stats?.currentStreak ?? '—'}
-            </div>
-            <p className="text-xs text-white/50">
-              Best streak: {statsLoading ? '...' : stats?.longestStreak ?? '—'}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {statsError && (
-        <Alert className="bg-red-500/10 border-red-500/30">
-          <AlertDescription className="text-red-300">
-            {statsError}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Progression */}
-      <Card className="bg-white/5 border-white/10">
-        <CardHeader>
-          <CardTitle className="text-white flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-emerald-300" />
-            Progression
-          </CardTitle>
-          <CardDescription className="text-white/60">
-            Track how your performance is trending.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div>
-            <div className="flex items-center justify-between text-sm text-white/70">
-              <span>Win rate</span>
-              <span>{formattedWinRate}</span>
-            </div>
-            <div className="mt-2 h-2 w-full rounded-full bg-white/10">
-              <div
-                className="h-2 rounded-full bg-gradient-to-r from-emerald-400 to-cyan-400"
-                style={{ width: `${winRateValue}%` }}
-              />
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={() => router.push('/game')}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white"
+              >
+                Start Match
+              </Button>
+              <Button
+                onClick={() => router.push('/tournaments')}
+                className="border-white/20 text-white hover:bg-white/10 hover:text-white"
+              >
+                Browse Tournaments
+              </Button>
             </div>
           </div>
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-              <p className="text-xs text-white/60">Matches won</p>
-              <p className="text-xl font-semibold text-white">{stats?.matchesWon ?? '—'}</p>
-            </div>
-            <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-              <p className="text-xs text-white/60">Matches lost</p>
-              <p className="text-xl font-semibold text-white">{stats?.matchesLost ?? '—'}</p>
-            </div>
-            <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-              <p className="text-xs text-white/60">Best streak</p>
-              <p className="text-xl font-semibold text-white">{stats?.longestStreak ?? '—'}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
-      {/* Recent Matches */}
-      <Card className="bg-white/5 border-white/10">
-        <CardHeader>
-          <CardTitle className="text-white flex items-center gap-2">
-            <Activity className="h-5 w-5 text-sky-300" />
-            Recent Matches
-          </CardTitle>
-          <CardDescription className="text-white/60">
-            Your latest results and momentum.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {stats?.recentMatches?.length ? (
-            <div className="space-y-3">
-              {stats.recentMatches.slice(0, 6).map((match, index) => (
-                <div
-                  key={`${match.matchId || match.playedAt || 'match'}-${index}`}
-                  className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 p-3 text-sm"
-                >
-                  <div>
-                    <p className="text-white">
-                      {match.result ? match.result.toUpperCase() : 'RESULT'} vs{' '}
-                      {match.opponentId
-                        ? opponentNames[match.opponentId] ||
-                          match.matchData?.opponentUsername ||
-                          match.matchData?.opponentName ||
-                          match.opponentId.slice(0, 8)
-                        : 'Opponent'}
-                    </p>
-                    <p className="text-xs text-white/50">
-                      {match.tournamentId
-                        ? tournamentNames[match.tournamentId] || `Tournament ${match.tournamentId.slice(0, 6)}`
-                        : 'Tournament'}
-                    </p>
-                    <p className="text-xs text-white/50">
-                      {match.playedAt ? new Date(match.playedAt).toLocaleString() : 'Time TBD'}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-white/80">
-                      {typeof match.pointsChange === 'number' ? `${match.pointsChange >= 0 ? '+' : ''}${match.pointsChange}` : '—'}
-                    </p>
-                    <p className="text-xs text-white/50">{match.matchId?.slice(0, 8) || 'Match'}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-white/60">No match history yet.</p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Seasons */}
-      <Card className="bg-white/5 border-white/10">
-        <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div>
-            <CardTitle className="text-white">Open Seasons</CardTitle>
-            <CardDescription className="text-white/60">
-              Only upcoming seasons with open joining are shown.
-            </CardDescription>
-          </div>
-          <Button
-            onClick={() => router.push('/tournaments')}
-            className="border-white/20 text-white hover:bg-white/10 hover:text-white"
-          >
-            Browse Tournaments
-          </Button>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {seasonsError && (
-            <Alert className="bg-red-500/10 border-red-500/30">
-              <AlertDescription className="text-red-300">
-                {seasonsError}
+          {searchParams.get('message') && (
+            <Alert className="mt-4 bg-green-500/10 border-green-500/30">
+              <AlertDescription className="text-green-400">
+                {searchParams.get('message')}
               </AlertDescription>
             </Alert>
           )}
-          {openSeasons.length === 0 && !seasonsError ? (
-            <p className="text-sm text-white/60">No open seasons right now.</p>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {openSeasons.map((season) => (
+        </section>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          <Card className="bg-white/5 border-white/10">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-white/70 flex items-center gap-2">
+                <Trophy className="h-4 w-4 text-emerald-300" />
+                Ranking Points
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-semibold text-white">
+                {statsLoading ? '...' : stats?.rankingPoints ?? '—'}
+              </div>
+              <p className="text-xs text-white/50">Climb the ladder with each win.</p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white/5 border-white/10">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-white/70 flex items-center gap-2">
+                <Target className="h-4 w-4 text-sky-300" />
+                Win Rate
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-semibold text-white">
+                {statsLoading ? '...' : formattedWinRate}
+              </div>
+              <p className="text-xs text-white/50">
+                {statsLoading ? 'Loading performance...' : `${stats?.matchesWon ?? 0} wins · ${stats?.matchesLost ?? 0} losses`}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white/5 border-white/10">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-white/70 flex items-center gap-2">
+                <Activity className="h-4 w-4 text-amber-300" />
+                Matches Played
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-semibold text-white">
+                {statsLoading ? '...' : stats?.totalMatches ?? '—'}
+              </div>
+              <p className="text-xs text-white/50">Total matches recorded.</p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white/5 border-white/10">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-white/70 flex items-center gap-2">
+                <Flame className="h-4 w-4 text-rose-300" />
+                Current Streak
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-semibold text-white">
+                {statsLoading ? '...' : stats?.currentStreak ?? '—'}
+              </div>
+              <p className="text-xs text-white/50">
+                Best streak: {statsLoading ? '...' : stats?.longestStreak ?? '—'}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {statsError && (
+          <Alert className="bg-red-500/10 border-red-500/30">
+            <AlertDescription className="text-red-300">
+              {statsError}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <Card className="rounded-3xl bg-white/5 border-white/10">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-emerald-300" />
+              Progression
+            </CardTitle>
+            <CardDescription className="text-white/60">
+              Track how your performance is trending.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div>
+              <div className="flex items-center justify-between text-sm text-white/70">
+                <span>Win rate</span>
+                <span>{formattedWinRate}</span>
+              </div>
+              <div className="mt-2 h-2 w-full rounded-full bg-white/10">
                 <div
-                  key={season.seasonId}
-                  className="rounded-xl border border-white/10 bg-white/5 p-4"
-                >
-                  <div className="flex items-center justify-between">
+                  className="h-2 rounded-full bg-gradient-to-r from-emerald-400 to-cyan-400"
+                  style={{ width: `${winRateValue}%` }}
+                />
+              </div>
+            </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                <p className="text-xs text-white/60">Matches won</p>
+                <p className="text-xl font-semibold text-white">{stats?.matchesWon ?? '—'}</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                <p className="text-xs text-white/60">Matches lost</p>
+                <p className="text-xl font-semibold text-white">{stats?.matchesLost ?? '—'}</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                <p className="text-xs text-white/60">Best streak</p>
+                <p className="text-xl font-semibold text-white">{stats?.longestStreak ?? '—'}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-3xl bg-white/5 border-white/10">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2">
+              <Activity className="h-5 w-5 text-sky-300" />
+              Recent Matches
+            </CardTitle>
+            <CardDescription className="text-white/60">
+              Your latest results and momentum.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {stats?.recentMatches?.length ? (
+              <div className="space-y-3">
+                {stats.recentMatches.slice(0, 6).map((match, index) => (
+                  <div
+                    key={`${match.matchId || match.playedAt || 'match'}-${index}`}
+                    className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-4 text-sm"
+                  >
                     <div>
-                      <p className="text-sm text-white/70">Season {season.seasonNumber}</p>
+                      <p className="text-white">
+                        {match.result ? match.result.toUpperCase() : 'RESULT'} vs{' '}
+                        {match.opponentId
+                          ? opponentNames[match.opponentId] ||
+                            match.matchData?.opponentUsername ||
+                            match.matchData?.opponentName ||
+                            match.opponentId.slice(0, 8)
+                          : 'Opponent'}
+                      </p>
                       <p className="text-xs text-white/50">
-                        {season.startTime ? new Date(season.startTime).toLocaleString() : 'Start time TBD'}
+                        {match.tournamentId
+                          ? tournamentNames[match.tournamentId] || `Tournament ${match.tournamentId.slice(0, 6)}`
+                          : 'Tournament'}
+                      </p>
+                      <p className="text-xs text-white/50">
+                        {match.playedAt ? new Date(match.playedAt).toLocaleString() : 'Time TBD'}
                       </p>
                     </div>
-                    <Badge className="bg-emerald-500/20 text-emerald-200 border-emerald-500/40">
-                      {season.status}
-                    </Badge>
+                    <div className="text-right">
+                      <p className="text-white/80">
+                        {typeof match.pointsChange === 'number' ? `${match.pointsChange >= 0 ? '+' : ''}${match.pointsChange}` : '—'}
+                      </p>
+                      <p className="text-xs text-white/50">{match.matchId?.slice(0, 8) || 'Match'}</p>
+                    </div>
                   </div>
-                  <div className="mt-3 flex items-center justify-between text-sm text-white/70">
-                    <span>{season.playerCount || 0} players</span>
-                    <span>{season.joiningClosed ? 'Joining closed' : 'Open to join'}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Tournaments */}
-      <Card className="bg-white/5 border-white/10">
-        <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div>
-            <CardTitle className="text-white">Live Tournaments</CardTitle>
-            <CardDescription className="text-white/60">
-              Active and upcoming tournaments to jump into.
-            </CardDescription>
-          </div>
-          <Button
-            onClick={() => router.push('/tournaments')}
-            className="border-white/20 text-white hover:bg-white/10 hover:text-white"
-          >
-            View All
-          </Button>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {tournamentsError && (
-            <Alert className="bg-red-500/10 border-red-500/30">
-              <AlertDescription className="text-red-300">
-                {tournamentsError}
-              </AlertDescription>
-            </Alert>
-          )}
-          {tournamentsLoading && (
-            <p className="text-sm text-white/60">Loading tournaments...</p>
-          )}
-          {!tournamentsLoading && visibleTournaments.length === 0 && !tournamentsError && (
-            <p className="text-sm text-white/60">No active or upcoming tournaments right now.</p>
-          )}
-          <div className="grid gap-4 lg:grid-cols-3">
-            {visibleTournaments.map((tournament) => (
-              <div
-                key={tournament.tournamentId}
-                className="rounded-xl border border-white/10 bg-white/5 p-4"
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-white">{tournament.name}</p>
-                    <p className="text-xs text-white/50">
-                      {tournament.startTime ? `Starts ${new Date(tournament.startTime).toLocaleDateString()}` : 'Start time TBD'}
-                    </p>
-                  </div>
-                  <Badge className="bg-sky-500/20 text-sky-200 border-sky-500/40">
-                    {tournament.status}
-                  </Badge>
-                </div>
-                <div className="mt-3 text-sm text-white/70">
-                  {tournament.currentPlayers}/{tournament.maxPlayers} players · Tsh {tournament.entryFee}
-                </div>
-                <Button
-                  onClick={() => router.push(`/tournaments/${tournament.tournamentId}`)}
-                  className="mt-4 w-full border-white/20 text-white hover:bg-white/10 hover:text-white"
-                >
-                  View Tournament
-                </Button>
+                ))}
               </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+            ) : (
+              <p className="text-sm text-white/60">No match history yet.</p>
+            )}
+          </CardContent>
+        </Card>
 
-      {/* Quick Actions */}
-      <Card className="bg-white/5 border-white/10">
-        <CardHeader>
-          <CardTitle className="text-white">Quick Actions</CardTitle>
-          <CardDescription className="text-white/60">
-            Jump back into the action
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-            <Button
-              onClick={() => router.push('/game')}
-              className="bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600"
-            >
-              Start a Match
-            </Button>
+        <Card className="rounded-3xl bg-white/5 border-white/10">
+          <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <CardTitle className="text-white">Open Seasons</CardTitle>
+              <CardDescription className="text-white/60">
+                Only upcoming seasons with open joining are shown.
+              </CardDescription>
+            </div>
             <Button
               onClick={() => router.push('/tournaments')}
               className="border-white/20 text-white hover:bg-white/10 hover:text-white"
             >
               Browse Tournaments
             </Button>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {seasonsError && (
+              <Alert className="bg-red-500/10 border-red-500/30">
+                <AlertDescription className="text-red-300">
+                  {seasonsError}
+                </AlertDescription>
+              </Alert>
+            )}
+            {openSeasons.length === 0 && !seasonsError ? (
+              <p className="text-sm text-white/60">No open seasons right now.</p>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
+                {openSeasons.map((season) => (
+                  <div
+                    key={season.seasonId}
+                    className="rounded-2xl border border-white/10 bg-white/5 p-4"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-white/70">Season {season.seasonNumber}</p>
+                        <p className="text-xs text-white/50">
+                          {season.startTime ? new Date(season.startTime).toLocaleString() : 'Start time TBD'}
+                        </p>
+                      </div>
+                      <Badge className="bg-emerald-500/20 text-emerald-200 border-emerald-500/40">
+                        {season.status}
+                      </Badge>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between text-sm text-white/70">
+                      <span>{season.playerCount || 0} players</span>
+                      <span>{season.joiningClosed ? 'Joining closed' : 'Open to join'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-3xl bg-white/5 border-white/10">
+          <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <CardTitle className="text-white">Live Tournaments</CardTitle>
+              <CardDescription className="text-white/60">
+                Active and upcoming tournaments to jump into.
+              </CardDescription>
+            </div>
             <Button
-              onClick={() => router.push('/profile')}
+              onClick={() => router.push('/tournaments')}
               className="border-white/20 text-white hover:bg-white/10 hover:text-white"
             >
-              Update Profile
+              View All
             </Button>
-            <Button
-              onClick={() => socket?.emit('player:stats:request', { playerId })}
-              className="border-white/20 text-white hover:bg-white/10 hover:text-white"
-            >
-              Refresh Stats
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {tournamentsError && (
+              <Alert className="bg-red-500/10 border-red-500/30">
+                <AlertDescription className="text-red-300">
+                  {tournamentsError}
+                </AlertDescription>
+              </Alert>
+            )}
+            {tournamentsLoading && (
+              <p className="text-sm text-white/60">Loading tournaments...</p>
+            )}
+            {!tournamentsLoading && visibleTournaments.length === 0 && !tournamentsError && (
+              <p className="text-sm text-white/60">No active or upcoming tournaments right now.</p>
+            )}
+            <div className="grid gap-4 lg:grid-cols-3">
+              {visibleTournaments.map((tournament) => (
+                <div
+                  key={tournament.tournamentId}
+                  className="rounded-2xl border border-white/10 bg-white/5 p-4"
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-white">{tournament.name}</p>
+                      <p className="text-xs text-white/50">
+                        {tournament.startTime ? `Starts ${new Date(tournament.startTime).toLocaleDateString()}` : 'Start time TBD'}
+                      </p>
+                    </div>
+                    <Badge className="bg-sky-500/20 text-sky-200 border-sky-500/40">
+                      {tournament.status}
+                    </Badge>
+                  </div>
+                  <div className="mt-3 text-sm text-white/70">
+                    {tournament.currentPlayers}/{tournament.maxPlayers} players · Tsh {tournament.entryFee}
+                  </div>
+                  <Button
+                    onClick={() => router.push(`/tournaments/${tournament.tournamentId}`)}
+                    className="mt-4 w-full border-white/20 text-white hover:bg-white/10 hover:text-white"
+                  >
+                    View Tournament
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-3xl bg-white/5 border-white/10">
+          <CardHeader>
+            <CardTitle className="text-white">Quick Actions</CardTitle>
+            <CardDescription className="text-white/60">
+              Jump back into the action
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+              <Button
+                onClick={() => router.push('/game')}
+                className="bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600"
+              >
+                Start a Match
+              </Button>
+              <Button
+                onClick={() => router.push('/tournaments')}
+                className="border-white/20 text-white hover:bg-white/10 hover:text-white"
+              >
+                Browse Tournaments
+              </Button>
+              <Button
+                onClick={() => router.push('/profile')}
+                className="border-white/20 text-white hover:bg-white/10 hover:text-white"
+              >
+                Update Profile
+              </Button>
+              <Button
+                onClick={() => socket?.emit('player:stats:request', { playerId })}
+                className="border-white/20 text-white hover:bg-white/10 hover:text-white"
+              >
+                Refresh Stats
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };

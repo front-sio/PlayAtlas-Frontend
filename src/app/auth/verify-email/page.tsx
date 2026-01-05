@@ -27,7 +27,7 @@ const VerifyEmailPage: React.FC = () => {
     const paramUserId = searchParams.get('userId');
     const paramChannel = searchParams.get('channel');
     let resolvedUserId = paramUserId || '';
-    let resolvedChannel = paramChannel === 'sms' ? 'sms' : 'email';
+    let resolvedChannel: 'email' | 'sms' = paramChannel === 'sms' ? 'sms' : 'email';
 
     if (!resolvedUserId && typeof window !== 'undefined') {
       const stored = sessionStorage.getItem('pendingVerification');
@@ -64,13 +64,22 @@ const VerifyEmailPage: React.FC = () => {
       });
 
       if (result.success) {
-        setSuccess(true);
+        const { user } = result.data;
+        
+        // Clear pending verification data
         if (typeof window !== 'undefined') {
           sessionStorage.removeItem('pendingVerification');
+          
+          // Store verified user data temporarily
+          sessionStorage.setItem('verifiedUser', JSON.stringify(user));
         }
-        // Redirect to dashboard after successful verification
+
+        setSuccess(true);
+        
+        // Redirect to login after successful verification
+        // User will need to log in with their credentials to get a proper session
         setTimeout(() => {
-          router.push('/dashboard?message=Verification successful');
+          router.push('/auth/login?message=Account verified successfully. Please log in.');
         }, 2000);
       } else {
         setError(result.error || 'Verification failed. Please try again.');
@@ -93,7 +102,8 @@ const VerifyEmailPage: React.FC = () => {
     setResendSuccess('');
 
     try {
-      const result = await authApi.resendVerificationCode(userId, channel);
+      const verificationChannel: 'email' | 'sms' = channel === 'sms' ? 'sms' : 'email';
+      const result = await authApi.resendVerificationCode(userId, verificationChannel);
       
       if (result.success) {
         setResendSuccess(

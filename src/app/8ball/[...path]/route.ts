@@ -48,7 +48,7 @@ export async function GET(
   }
 
   // Base directory is sibling to the Next.js app: <repo>/8ball-source
-  const baseDir = path.resolve(process.cwd(), "..", "8ball-source");
+  const baseDir = path.resolve(process.cwd(), "public", "8ball");
   const requestedPath = path.resolve(baseDir, ...safeParts);
 
   // Prevent path traversal

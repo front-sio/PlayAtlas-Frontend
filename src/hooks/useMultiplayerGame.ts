@@ -47,7 +47,7 @@ export function useMultiplayerGame({ playerId, matchId, sessionId }: UseMultipla
   // Initialize socket connections
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      gameSocketService.connect();
+      gameSocketService.connect(playerId);
       matchmakingSocketService.connect();
 
       gameSocketService.authenticate(playerId);

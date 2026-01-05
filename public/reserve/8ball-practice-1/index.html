@@ -1,0 +1,90 @@
+<!doctype html>
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
+    <meta http-equiv="encoding" content="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, minimal-ui"
+    />
+    <title>8 Ball Billiards Classic</title>
+    
+    <!-- Socket.IO for multiplayer -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+    
+    <script>
+      (function () {
+        const resolved = Promise.resolve();
+        const noop = function () {};
+
+        window.fenster = window;
+        window.fenster.subscribeToOffsetUpdates = noop;
+        window.famobi = {
+          localStorage: window.localStorage,
+          getOrientation: () => (window.innerWidth < window.innerHeight ? 'portrait' : 'landscape'),
+          onOrientationChange: (cb) => window.addEventListener('resize', cb),
+          hasFeature: () => false,
+          getVolume: () => 1,
+          gameReady: noop,
+          playerReady: noop,
+          log: noop,
+          onRequest: noop,
+          moreGamesLink: noop,
+          getBrandingButtonImage: () => 'assets/img/famobi.png'
+        };
+
+        window.famobi_analytics = {
+          trackScreen: () => resolved,
+          trackEvent: () => resolved,
+          EVENT_VOLUMECHANGE: 'EVENT_VOLUMECHANGE',
+          EVENT_LEVELSTART: 'EVENT_LEVELSTART',
+          EVENT_LEVELSUCCESS: 'EVENT_LEVELSUCCESS',
+          EVENT_LEVELFAIL: 'EVENT_LEVELFAIL',
+          EVENT_TOTALSCORE: 'EVENT_TOTALSCORE'
+        };
+
+        const params = new URLSearchParams(window.location.search);
+        const mode = params.get('mode') || 'practice';
+        const ai = Number(params.get('ai') || 3);
+        window.__POOL_AUTOSTART__ = {
+          enabled: params.get('autostart') === '1',
+          mode,
+          ai
+        };
+      })();
+    </script>
+    <script>
+      window.gameID = '8-ball-billiards-classic';
+      window.gameJS = [
+        'assets/src/01phaser.js',
+        'assets/src/02Ball.js',
+        'assets/src/03contactListener.js',
+        'assets/src/04billiardPhysics.js',
+        'assets/src/05levelData.js',
+        'assets/src/06maths.js',
+        'assets/src/07vector2d.js',
+        'assets/src/08render.js',
+        'assets/src/09sound.js',
+        'assets/src/10effects.js',
+        'assets/src/11timer.js',
+        'assets/src/12load.js',
+        'assets/src/serverIntegration.js',
+        'assets/src/13mainMenu.js',
+        'assets/src/14setup.js',
+        'assets/src/15gameController.js',
+        'assets/src/16boot.js'
+      ];
+
+      (function loadScripts(index) {
+        if (index >= window.gameJS.length) return;
+        const script = document.createElement('script');
+        script.src = window.gameJS[index];
+        script.onload = () => loadScripts(index + 1);
+        document.head.appendChild(script);
+      })(0);
+    </script>
+  </head>
+  <body>
+    <div id="mygame"></div>
+  </body>
+</html>

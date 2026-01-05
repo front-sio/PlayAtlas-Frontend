@@ -55,6 +55,9 @@ type Pocket = { x: number; y: number; radius: number; kind?: 'corner' | 'side' |
 export type ShotData = {
   direction: { x: number; y: number };
   power: number;
+  cueBallPosition?: { x: number; y: number };
+  screw?: number;
+  english?: number;
 };
 
 export type GameState = {
@@ -225,6 +228,9 @@ export class PoolGameEngine {
   private message = 'Break rack';
   private localSide: PlayerId = 'p1';
   private lastShotOrigin: 'local' | 'remote' | 'ai' | null = null;
+  private spinEnglish = 0;
+  private spinScrew = 0;
+  private lastCuePlacement: Vec2 | null = null;
 
   private isAiming = false;
   private isPlacingCue = false;
@@ -439,7 +445,9 @@ export class PoolGameEngine {
   onPointerUp() {
     if (this.isPlacingCue) {
       this.isPlacingCue = false;
-      this.ballInHand = false;
+      if (this.lastCuePlacement) {
+        this.ballInHand = false;
+      }
       this.emitHud();
       return;
     }
@@ -465,11 +473,23 @@ export class PoolGameEngine {
     this.localSide = side;
   }
 
+  setSpin(english: number, screw: number) {
+    this.spinEnglish = clamp(english, -1, 1);
+    this.spinScrew = clamp(screw, -1, 1);
+  }
+
   applyRemoteShot(shot: ShotData) {
     if (this.winner) return;
     this.aimDir = new Vec2(shot.direction.x, shot.direction.y).normalize();
     this.aimPower = shot.power;
     this.takeShot('remote');
+  }
+
+  cancelPendingShot() {
+    if (!this.shotRunning) return;
+    this.shotRunning = false;
+    this.isAiming = false;
+    this.emitHud();
   }
 
   getState(): GameState {
@@ -505,8 +525,10 @@ export class PoolGameEngine {
     this.p2Score = state.p2Score;
     this.message = state.message || '';
     this.shotRunning = false;
+    this.isAiming = false;
     this.aiThinking = false;
     this.lastShotOrigin = null;
+    this.lastCuePlacement = null;
     this.shotEvents = {
       firstContact: null,
       pocketed: [],
@@ -1761,11 +1783,29 @@ export class PoolGameEngine {
     const cue = this.balls[0];
     if (!cue) return;
 
+    const screw = origin === 'local' ? this.spinScrew : 0;
+    const english = origin === 'local' ? this.spinEnglish : 0;
+
     if (origin === 'local' && this.mode === 'match' && this.onShot) {
-      this.onShot({
+      if (this.ballInHand && !this.lastCuePlacement) {
+        this.message = 'Place the cue ball first';
+        this.emitHud();
+        return;
+      }
+      const payload: ShotData = {
         direction: { x: this.aimDir.x, y: this.aimDir.y },
-        power: this.aimPower
-      });
+        power: this.aimPower,
+        screw,
+        english
+      };
+      if (this.lastCuePlacement) {
+        payload.cueBallPosition = { x: this.lastCuePlacement.x, y: this.lastCuePlacement.y };
+      }
+      this.onShot(payload);
+      this.lastCuePlacement = null;
+      this.shotRunning = true;
+      this.emitHud();
+      return;
     }
 
     this.lastShotOrigin = origin;
@@ -1775,8 +1815,8 @@ export class PoolGameEngine {
     cue.vel.y = this.aimDir.y * velocityScale;
 
     const spinAmount = Math.min(20, (this.aimPower / MAX_SHOT_POWER) * 18);
-    cue.screw = 0;
-    cue.english = 0;
+    cue.screw = screw;
+    cue.english = english;
     cue.ySpin = spinAmount * 0.3;
     cue.firstContact = false;
     cue.grip = 1;
@@ -1795,10 +1835,10 @@ export class PoolGameEngine {
     if (!cue) return false;
 
     const bounds = {
-      left: RAIL_MARGIN + cue.radius + 6,
-      right: TABLE_WIDTH - RAIL_MARGIN - cue.radius - 6,
-      top: RAIL_MARGIN + cue.radius + 6,
-      bottom: TABLE_HEIGHT - RAIL_MARGIN - cue.radius - 6
+      left: RAIL_MARGIN + cue.radius,
+      right: TABLE_WIDTH - RAIL_MARGIN - cue.radius,
+      top: RAIL_MARGIN + cue.radius,
+      bottom: TABLE_HEIGHT - RAIL_MARGIN - cue.radius
     };
 
     const pos = new Vec2(
@@ -1808,8 +1848,8 @@ export class PoolGameEngine {
 
     for (const pk of this.pockets) {
       const dist = Math.hypot(pos.x - pk.x, pos.y - pk.y);
-      if (dist < pk.radius * 1.2) {
-        const away = Vec2.sub(pos, new Vec2(pk.x, pk.y)).normalize().scale(pk.radius * 1.3);
+      if (dist < pk.radius * 1.1) {
+        const away = Vec2.sub(pos, new Vec2(pk.x, pk.y)).normalize().scale(pk.radius * 1.15);
         pos.x = pk.x + away.x;
         pos.y = pk.y + away.y;
       }
@@ -1831,6 +1871,7 @@ export class PoolGameEngine {
       cue.pos.y = pos.y;
       cue.vel.x = 0;
       cue.vel.y = 0;
+      this.lastCuePlacement = pos.clone();
       return true;
     }
 
@@ -1877,6 +1918,7 @@ export class PoolGameEngine {
     }
 
     this.drawCue(ctx);
+    this.drawSpinIndicator(ctx);
 
     if (this.debugMode) {
       this.drawDebug(ctx);
@@ -1968,6 +2010,29 @@ export class PoolGameEngine {
     }
 
     ctx.drawImage(this.cueImage, cueX, cueY, width, height);
+    ctx.restore();
+  }
+
+  private drawSpinIndicator(ctx: CanvasRenderingContext2D) {
+    if (this.shotRunning || this.ballInHand) return;
+    if (this.mode === 'match' && this.turn !== this.localSide) return;
+    const cue = this.balls[0];
+    if (!cue || !cue.active) return;
+    if (this.spinEnglish === 0 && this.spinScrew === 0) return;
+
+    const r = cue.radius * 0.55;
+    const offsetX = this.spinEnglish * r;
+    const offsetY = -this.spinScrew * r;
+    const dotRadius = cue.radius * 0.18;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 2;
+    ctx.arc(cue.pos.x + offsetX, cue.pos.y + offsetY, dotRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
     ctx.restore();
   }
 

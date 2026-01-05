@@ -1,9 +1,18 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 html, body {
   height: 100%;
   overflow-x: hidden;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 /* Pool table container - ensures proper spacing from HUD */
@@ -79,6 +88,8 @@ html, body {
 
 :root {
   --radius: 0.625rem;
+  --font-tournament: "Space Grotesk", var(--font-geist-sans);
+  --font-tournament-display: "Fraunces", var(--font-geist-sans);
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);

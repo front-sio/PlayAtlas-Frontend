@@ -60,9 +60,12 @@ export function PoolGameCanvas({
   const [hud, setHud] = useState<Hud | null>(null);
   const [isMobilePortrait, setIsMobilePortrait] = useState(false);
   const [showFullscreenPrompt, setShowFullscreenPrompt] = useState(false);
+  const [spin, setSpin] = useState({ x: 0, y: 0 });
   const { data: session } = useSession();
   const onShotRef = useRef<typeof onShot>(onShot);
   const onStateRef = useRef<typeof onState>(onState);
+  const spinPadRef = useRef<HTMLDivElement | null>(null);
+  const spinDragRef = useRef(false);
 
   // Get player name from session or fallback
   const playerName = session?.user?.username || 
@@ -101,6 +104,8 @@ export function PoolGameCanvas({
       : 'Opponent wins by pocketing the 8-ball.';
   }, [hud, localSide]);
 
+  const spinDotRange = 28;
+
   const requestFullscreen = useCallback(() => {
     if (!fullscreen) return;
     const el = containerRef.current as HTMLElement | null;
@@ -120,6 +125,47 @@ export function PoolGameCanvas({
       // Ignore fullscreen errors.
     }
   }, [fullscreen]);
+
+  const updateSpin = useCallback((clientX: number, clientY: number) => {
+    const pad = spinPadRef.current;
+    if (!pad) return;
+    const rect = pad.getBoundingClientRect();
+    const dx = clientX - rect.left - rect.width / 2;
+    const dy = clientY - rect.top - rect.height / 2;
+    const radius = rect.width / 2 - 6;
+    const dist = Math.hypot(dx, dy);
+    const scale = dist > radius ? radius / dist : 1;
+    const nx = (dx * scale) / radius;
+    const ny = (dy * scale) / radius;
+    const next = { x: nx, y: ny };
+    setSpin(next);
+    engineRef.current?.setSpin(next.x, -next.y);
+  }, []);
+
+  const resetSpin = useCallback(() => {
+    setSpin({ x: 0, y: 0 });
+    engineRef.current?.setSpin(0, 0);
+  }, []);
+
+  const onSpinPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    spinDragRef.current = true;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    updateSpin(event.clientX, event.clientY);
+  }, [updateSpin]);
+
+  const onSpinPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!spinDragRef.current) return;
+    updateSpin(event.clientX, event.clientY);
+  }, [updateSpin]);
+
+  const onSpinPointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    spinDragRef.current = false;
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      // Ignore pointer capture errors.
+    }
+  }, []);
 
   useEffect(() => {
     onShotRef.current = onShot;
@@ -142,6 +188,7 @@ export function PoolGameCanvas({
       localSide: localSide || 'p1'
     });
     engine.setAiDifficulty(aiDifficulty);
+    engine.setSpin(0, 0);
     engineRef.current = engine;
     onEngineReady?.(engine);
 
@@ -483,6 +530,36 @@ export function PoolGameCanvas({
           )}
         </div>
 
+        {mode === 'match' && (
+          <div className="absolute right-3 bottom-6 z-20 flex flex-col items-center gap-2 pointer-events-auto">
+            <div className="text-[10px] text-white/70">Spin</div>
+            <div
+              ref={spinPadRef}
+              onPointerDown={onSpinPointerDown}
+              onPointerMove={onSpinPointerMove}
+              onPointerUp={onSpinPointerUp}
+              onPointerLeave={onSpinPointerUp}
+              className="relative w-20 h-20 rounded-full bg-black/50 border border-white/15 backdrop-blur-sm"
+              style={{ touchAction: 'none' }}
+            >
+              <div className="absolute inset-1 rounded-full border border-white/10" />
+              <div
+                className="absolute left-1/2 top-1/2 h-3 w-3 rounded-full bg-white/90 shadow"
+                style={{
+                  transform: `translate(-50%, -50%) translate(${spin.x * spinDotRange}px, ${spin.y * spinDotRange}px)`
+                }}
+              />
+            </div>
+            <Button
+              size="sm"
+              className="bg-white/10 text-white/80 border-white/15 hover:bg-white/20"
+              onClick={resetSpin}
+            >
+              Reset
+            </Button>
+          </div>
+        )}
+
         {/* Winner overlay */}
         {showWinnerOverlay && hud?.winner && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/80 backdrop-blur-sm z-20">
@@ -561,6 +638,35 @@ export function PoolGameCanvas({
           maxHeight: '85vh'
         }}
       >
+        {mode === 'match' && (
+          <div className="absolute right-3 bottom-3 z-20 flex flex-col items-center gap-2 pointer-events-auto">
+            <div className="text-[10px] text-white/70">Spin</div>
+            <div
+              ref={spinPadRef}
+              onPointerDown={onSpinPointerDown}
+              onPointerMove={onSpinPointerMove}
+              onPointerUp={onSpinPointerUp}
+              onPointerLeave={onSpinPointerUp}
+              className="relative w-16 h-16 rounded-full bg-black/50 border border-white/15 backdrop-blur-sm"
+              style={{ touchAction: 'none' }}
+            >
+              <div className="absolute inset-1 rounded-full border border-white/10" />
+              <div
+                className="absolute left-1/2 top-1/2 h-3 w-3 rounded-full bg-white/90 shadow"
+                style={{
+                  transform: `translate(-50%, -50%) translate(${spin.x * spinDotRange}px, ${spin.y * spinDotRange}px)`
+                }}
+              />
+            </div>
+            <Button
+              size="sm"
+              className="bg-white/10 text-white/80 border-white/15 hover:bg-white/20"
+              onClick={resetSpin}
+            >
+              Reset
+            </Button>
+          </div>
+        )}
         <canvas 
           ref={canvasRef} 
           className="absolute inset-0 w-full h-full"

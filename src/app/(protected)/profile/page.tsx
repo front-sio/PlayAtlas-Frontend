@@ -381,35 +381,37 @@ const ProfilePage: React.FC = () => {
 
   if (error || !profile) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Profile</h1>
-          <p className="text-white/70">Manage your profile and track your progress</p>
-        </div>
+      <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.12),_transparent_55%),radial-gradient(circle_at_20%_30%,_rgba(59,130,246,0.12),_transparent_55%),linear-gradient(180deg,_#0a0f1b_0%,_#070a13_50%,_#06080f_100%)] text-white">
+        <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-emerald-200/80">Player Profile</p>
+            <h1 className="mt-2 text-3xl font-bold text-white">Profile</h1>
+            <p className="text-white/70">Manage your profile and track your progress</p>
+          </div>
 
-        <Card className="bg-white/5 border-white/10">
-          <CardContent className="py-10 text-center space-y-3">
-            <h2 className="text-xl font-semibold text-white">Couldn’t load your profile</h2>
-            <p className="text-sm text-red-300">{error || 'Failed to load profile data'}</p>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center pt-3">
-              <Button
-                onClick={fetchUserData}
-                className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
-              >
-                Try Again
-              </Button>
-              {status === 'unauthenticated' && (
+          <Card className="bg-white/5 border-white/10">
+            <CardContent className="py-10 text-center space-y-3">
+              <h2 className="text-xl font-semibold text-white">Couldn’t load your profile</h2>
+              <p className="text-sm text-red-300">{error || 'Failed to load profile data'}</p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center pt-3">
                 <Button
-                  
-                  className="border-white/20 text-white/80 hover:bg-white/10"
-                  onClick={() => router.push('/auth/login')}
+                  onClick={fetchUserData}
+                  className="bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600"
                 >
-                  Go to Login
+                  Try Again
                 </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                {status === 'unauthenticated' && (
+                  <Button
+                    className="border-white/20 text-white/80 hover:bg-white/10"
+                    onClick={() => router.push('/auth/login')}
+                  >
+                    Go to Login
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }
@@ -418,36 +420,56 @@ const ProfilePage: React.FC = () => {
   const wonMatches = playedMatches.filter((match) => match.winnerId === profile.id);
 
   return (
-    <div className="space-y-6">
-      <div className="text-center">
-        <h1 className="text-3xl font-bold text-white">My Profile</h1>
-        <p className="text-white/70">Manage your profile and track your progress</p>
-      </div>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.12),_transparent_55%),radial-gradient(circle_at_20%_30%,_rgba(59,130,246,0.12),_transparent_55%),linear-gradient(180deg,_#0a0f1b_0%,_#070a13_50%,_#06080f_100%)] text-white">
+      <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
+        <section className="rounded-3xl border border-white/10 bg-white/5 p-6 sm:p-8 backdrop-blur">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-emerald-200/80">Player Profile</p>
+              <h1 className="mt-2 text-3xl font-bold text-white">My Profile</h1>
+              <p className="text-white/70">Manage your profile and track your progress</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={() => router.push('/dashboard')}
+                className="border-white/20 text-white hover:bg-white/10 hover:text-white"
+              >
+                Back to Dashboard
+              </Button>
+              <Button
+                onClick={() => setActiveTab('settings')}
+                className="bg-emerald-500 hover:bg-emerald-600"
+              >
+                Edit Profile
+              </Button>
+            </div>
+          </div>
+        </section>
 
-      <div className="grid lg:grid-cols-3 gap-8">
+        <div className="grid lg:grid-cols-3 gap-8">
         {/* Left card */}
         <div className="lg:col-span-1">
-          <Card className="bg-white/5 border-white/10">
-            <CardContent className="p-6">
+          <Card className="bg-white/5 border-white/10 rounded-3xl">
+            <CardContent className="p-6 space-y-5">
               <div className="text-center">
                 <div className="relative inline-block">
-                  <Avatar className="w-24 h-24 mx-auto mb-4">
+                  <Avatar className="w-24 h-24 mx-auto mb-4 border border-white/10">
                     <AvatarImage src={profile.avatar} alt={profile.displayName} />
-                    <AvatarFallback className="text-2xl bg-gradient-to-r from-purple-600 to-pink-600">
+                    <AvatarFallback className="text-2xl bg-gradient-to-r from-emerald-500 to-cyan-500">
                       {profile.displayName.charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
-                  <Button size="sm"  className="absolute bottom-2 right-2 border-white/20 text-white/80 hover:bg-white/10">
+                  <Button size="sm" className="absolute bottom-2 right-2 border-white/20 text-white/80 hover:bg-white/10">
                     <Camera className="w-4 h-4" />
                   </Button>
                 </div>
 
                 <h2 className="text-2xl font-bold text-white mb-2">{profile.displayName}</h2>
-                <p className="text-purple-300 mb-4">@{profile.username}</p>
+                <p className="text-emerald-200 mb-4">@{profile.username}</p>
 
                 <div className="flex items-center justify-center space-x-2 mb-4">
-                  <Badge className="bg-purple-600/20 text-purple-300 border-purple-500/30">Level {profile.level}</Badge>
-                  <Badge className="bg-cyan-600/20 text-cyan-300 border-cyan-500/30">Rank #{profile.rank}</Badge>
+                  <Badge className="bg-emerald-600/20 text-emerald-200 border-emerald-500/30">Level {profile.level}</Badge>
+                  <Badge className="bg-sky-600/20 text-sky-200 border-sky-500/30">Rank #{profile.rank}</Badge>
                 </div>
 
                 <div className="space-y-3">
@@ -482,23 +504,23 @@ const ProfilePage: React.FC = () => {
         {/* Right tabs */}
         <div className="lg:col-span-2">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-6 mb-6 bg-white/5 border border-white/10">
-              <TabsTrigger value="overview" className="text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white">
+            <TabsList className="flex h-12 w-full flex-nowrap items-center gap-2 overflow-x-auto rounded-lg border border-white/10 bg-white/5 px-4 mb-6 snap-x snap-mandatory no-scrollbar">
+              <TabsTrigger value="overview" className="min-w-[140px] flex-none snap-start text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white">
                 Overview
               </TabsTrigger>
-              <TabsTrigger value="achievements" className="text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white">
+              <TabsTrigger value="achievements" className="min-w-[140px] flex-none snap-start text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white">
                 Achievements
               </TabsTrigger>
-              <TabsTrigger value="seasons" className="text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white">
+              <TabsTrigger value="seasons" className="min-w-[140px] flex-none snap-start text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white">
                 Seasons
               </TabsTrigger>
-              <TabsTrigger value="matches" className="text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white">
+              <TabsTrigger value="matches" className="min-w-[140px] flex-none snap-start text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white">
                 Matches
               </TabsTrigger>
-              <TabsTrigger value="settings" className="text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white">
+              <TabsTrigger value="settings" className="min-w-[140px] flex-none snap-start text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white">
                 Settings
               </TabsTrigger>
-              <TabsTrigger value="notifications" className="text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white">
+              <TabsTrigger value="notifications" className="min-w-[160px] flex-none snap-start text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white">
                 Notifications
               </TabsTrigger>
             </TabsList>
@@ -986,6 +1008,7 @@ const ProfilePage: React.FC = () => {
           </p>
         </div>
       )}
+    </div>
     </div>
   );
 };

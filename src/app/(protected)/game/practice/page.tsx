@@ -1,139 +1,106 @@
 
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useMemo, useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useSession } from 'next-auth/react';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Brain, ArrowLeft } from 'lucide-react';
-import { PoolGameCanvas } from '@/components/pool/PoolGameCanvas';
-import { GameState, PoolGameEngine } from '@/lib/pool/engine';
+import { Brain, ArrowLeft, RotateCcw } from 'lucide-react';
 
 export default function PlayPracticePage() {
+  const { data: session } = useSession();
   const [aiDifficulty, setAiDifficulty] = useState(3);
-  const [gameKey, setGameKey] = useState(0);
-  const pendingStateRef = useRef<GameState | null>(null);
+  const [iframeLoaded, setIframeLoaded] = useState(false);
 
-  const storageKey = 'playatlas.practice.state.v1';
-  const maxAgeMs = 6 * 60 * 60 * 1000;
-
-  const handleDifficultyChange = (level: number) => {
+  const handleDifficultyChange = useCallback((level: number) => {
     setAiDifficulty(level);
-    setGameKey(prev => prev + 1);
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(storageKey);
+  }, []);
+
+  const difficultyLabels = ['', 'Beginner', 'Easy', 'Medium', 'Hard', 'Expert'];
+  
+  // Use the practice version of 8ball
+  const iframeSrc = useMemo(() => {
+    const params = new URLSearchParams({
+      autostart: '1',
+      mode: 'practice',
+      ai: String(aiDifficulty),
+    });
+    return `/8ball-practice/index.html?${params.toString()}`;
+  }, [aiDifficulty]);
+
+  // Send player data to iframe when it loads
+  useEffect(() => {
+    if (iframeLoaded && session?.user) {
+      const iframe = document.querySelector('iframe');
+      if (iframe?.contentWindow) {
+        const playerData = {
+          type: 'SET_PLAYER_DATA',
+          data: {
+            playerId: session.user.userId,
+            playerName: session.user.username || `${session.user.firstName} ${session.user.lastName}`.trim(),
+            token: session.accessToken,
+            mode: 'practice'
+          }
+        };
+        
+        iframe.contentWindow.postMessage(playerData, window.location.origin);
+      }
+    }
+  }, [iframeLoaded, session]);
+
+  // Send AI level updates to iframe
+  useEffect(() => {
+    if (iframeLoaded) {
+      const iframe = document.querySelector('iframe');
+      if (iframe?.contentWindow) {
+        iframe.contentWindow.postMessage({
+          type: 'UPDATE_AI_LEVEL',
+          data: { level: aiDifficulty }
+        }, window.location.origin);
+      }
+    }
+  }, [aiDifficulty, iframeLoaded]);
+
+  const handleIframeLoad = () => {
+    setIframeLoaded(true);
+  };
+
+  const restartGame = () => {
+    const iframe = document.querySelector('iframe');
+    if (iframe?.contentWindow) {
+      // Force restart by reloading iframe
+      iframe.src = iframe.src;
     }
   };
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as { savedAt: number; aiDifficulty: number; state: GameState };
-      if (!parsed?.state || !parsed?.savedAt) {
-        localStorage.removeItem(storageKey);
-        return;
-      }
-      if (Date.now() - parsed.savedAt > maxAgeMs) {
-        localStorage.removeItem(storageKey);
-        return;
-      }
-      if (parsed.aiDifficulty && parsed.aiDifficulty !== aiDifficulty) {
-        localStorage.removeItem(storageKey);
-        return;
-      }
-      pendingStateRef.current = parsed.state;
-    } catch {
-      localStorage.removeItem(storageKey);
-    }
-  }, [aiDifficulty]);
-
-  const handleEngineReady = useCallback((engine: PoolGameEngine) => {
-    if (pendingStateRef.current) {
-      engine.applyState(pendingStateRef.current);
-      pendingStateRef.current = null;
-    }
-  }, []);
-
-  const handleState = useCallback((state: GameState) => {
-    if (typeof window === 'undefined') return;
-    if (state.winner) {
-      localStorage.removeItem(storageKey);
-      return;
-    }
-    const payload = { savedAt: Date.now(), aiDifficulty, state };
-    localStorage.setItem(storageKey, JSON.stringify(payload));
-  }, [aiDifficulty]);
-
-  const difficultyLabels = ['', 'Beginner', 'Easy', 'Medium', 'Hard', 'Expert'];
-
   return (
     <div className="relative w-full h-full">
-      {/* Game Canvas - Fullscreen */}
-      <PoolGameCanvas
-        key={gameKey}
-        mode="practice"
-        aiDifficulty={aiDifficulty}
-        fullscreen
-        onEngineReady={handleEngineReady}
-        onState={handleState}
+      <iframe
+        key={iframeSrc}
+        src={iframeSrc}
+        title="8-ball practice"
+        className="absolute inset-0 h-full w-full border-0"
+        allow="autoplay; fullscreen"
+        allowFullScreen
+        onLoad={handleIframeLoad}
       />
       
-      {/* Top Controls Overlay */}
-      <div className="absolute top-[28%] left-3 right-3 z-30 flex items-center justify-between gap-3">
+      {/* Top Controls */}
+      <div className="absolute top-3 right-3 z-30 flex items-center justify-between gap-3">
         {/* Back Button */}
         <Link href="/game">
           <Button 
-             
             size="sm"
             className="bg-black/60 backdrop-blur-sm border-white/20 text-white hover:bg-black/80"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Lobby
+            Back
           </Button>
         </Link>
-      </div>
 
-      {/* AI Difficulty Control - Right Side */}
-      <div className="absolute right-2 top-[55%] -translate-y-1/2 z-30">
-        <Card className="bg-black/55 backdrop-blur-sm border-white/15">
-          <CardContent className="p-1.5 flex flex-col items-center gap-1.5">
-            <div className="flex items-center gap-2">
-              <Brain className="h-3.5 w-3.5 text-purple-300" />
-              <span className="text-[10px] text-white/80 font-medium">AI</span>
-            </div>
-            <div className="flex flex-col gap-1">
-              {[5, 4, 3, 2, 1].map((level) => (
-                <Button
-                  key={level}
-                  onClick={() => handleDifficultyChange(level)}
-                  size="sm"
-                  className={`w-7 h-7 p-0 ${
-                    aiDifficulty === level
-                      ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                      : 'bg-white/10 hover:bg-white/20 text-white/70 border-white/20'
-                  }`}
-                >
-                  {level}
-                </Button>
-              ))}
-            </div>
-            <Badge className="border-white/15 text-white/80 text-[9px]">
-              {difficultyLabels[aiDifficulty]}
-            </Badge>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Bottom Tips */}
-      <div className="absolute bottom-2 right-3 z-30 pointer-events-none">
-        <div className="bg-black/40 backdrop-blur-sm border border-white/10 rounded-full px-3 py-1.5">
-          <p className="text-[10px] text-white/70">
-            Practice mode • No stats • Press D for debug
-          </p>
-        </div>
+      
       </div>
     </div>
   );

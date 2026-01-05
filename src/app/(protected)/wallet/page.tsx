@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowUpRight, ArrowDownLeft, Wallet, Plus, Minus, RefreshCw, Eye, EyeOff, Smartphone, Building, History, TrendingUp, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import { ArrowUpRight, ArrowDownLeft, Wallet, Plus, Minus, RefreshCw, Eye, EyeOff, Smartphone, Building, History, TrendingUp, AlertCircle, CheckCircle, Clock, Send, Download, Copy, Check } from 'lucide-react';
 import { getWalletBalance, withdrawFunds, paymentApi } from '@/lib/apiService';
 import { PageLoader } from '@/components/ui/page-loader';
 import PaymentConfirmation from '@/components/PaymentConfirmation';
@@ -16,13 +16,16 @@ import { useSocket } from '@/hooks/useSocket';
 
 interface Transaction {
   id: string;
-  type: 'DEPOSIT' | 'WITHDRAWAL' | 'TOURNAMENT_ENTRY' | 'WINNINGS' | 'TRANSFER' | 'ADJUSTMENT';
+  type: 'DEPOSIT' | 'WITHDRAWAL' | 'TOURNAMENT_ENTRY' | 'WINNINGS' | 'TRANSFER_SENT' | 'TRANSFER_RECEIVED' | 'TOURNAMENT_FEE' | 'ADJUSTMENT';
   amount: number;
   status: string;
   description: string;
   createdAt: string;
   paymentMethod?: string;
   reference?: string;
+  direction?: 'sent' | 'received';
+  tournamentId?: string;
+  seasonId?: string;
 }
 
 interface PaymentProvider {
@@ -54,7 +57,7 @@ interface DepositReceipt {
 }
 
 const WalletPage: React.FC = () => {
-  const { status } = useSession();
+  const { data: session, status } = useSession();
   const { socket } = useSocket({ enabled: true });
   const [balance, setBalance] = useState(0);
   const [walletId, setWalletId] = useState<string | null>(null);
@@ -67,9 +70,24 @@ const WalletPage: React.FC = () => {
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawPhoneNumber, setWithdrawPhoneNumber] = useState('');
   const [withdrawMethod, setWithdrawMethod] = useState<'airtel' | 'mpesa' | 'tigopesa' | 'halopesa' | 'bank'>('mpesa');
+  const [transferAmount, setTransferAmount] = useState('');
+  const [transferPhoneNumber, setTransferPhoneNumber] = useState('');
+  const [transferDescription, setTransferDescription] = useState('');
+  const [transferRecipient, setTransferRecipient] = useState<{
+    userId: string;
+    firstName?: string;
+    lastName?: string;
+    username?: string;
+    phoneNumber?: string;
+  } | null>(null);
+  const [transferLookupLoading, setTransferLookupLoading] = useState(false);
+  const [transferLookupError, setTransferLookupError] = useState<string | null>(null);
+  const [transferConfirmed, setTransferConfirmed] = useState(false);
+  const [walletNumberCopied, setWalletNumberCopied] = useState(false);
   const [providers, setProviders] = useState<PaymentProvider[]>([]);
   const [providersLoading, setProvidersLoading] = useState(true);
   const [providersError, setProvidersError] = useState<string | null>(null);
+  const [transactionError, setTransactionError] = useState<string | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [providerDetails, setProviderDetails] = useState<ProviderDetails | null>(null);
   const [providerDetailsLoading, setProviderDetailsLoading] = useState(false);
@@ -141,6 +159,15 @@ const WalletPage: React.FC = () => {
     setAlertModal({ open: true, title, message, type });
   };
 
+  const copyWalletNumber = async () => {
+    const receiveNumber = session?.user?.phoneNumber || walletId;
+    if (receiveNumber && typeof window !== 'undefined') {
+      await navigator.clipboard.writeText(receiveNumber);
+      setWalletNumberCopied(true);
+      setTimeout(() => setWalletNumberCopied(false), 2000);
+    }
+  };
+
   const normalizeStatus = (value?: string) => (value ? value.toUpperCase() : 'PENDING');
 
   // Convert DepositReceipt to Transaction for display in transaction history
@@ -163,55 +190,85 @@ const WalletPage: React.FC = () => {
     const statusKey = String(tx.status || '').toUpperCase();
     const isDeposit = typeKey === 'deposit';
     const isWithdrawal = typeKey === 'withdrawal';
+    const isTournamentFee = typeKey === 'tournament_fee';
+    const isTransferSent = typeKey === 'transfer_sent';
+    const isTransferReceived = typeKey === 'transfer_received';
     
     // Handle PENDING_PAYMENT status (deposits waiting for transaction message confirmation)
-    // These are deposits with status='PENDING_PAYMENT' that need confirmation
     const isPendingPayment = statusKey === 'PENDING_PAYMENT';
     
-    // Accept if: deposit, withdrawal, OR pending_payment status
-    if (!isDeposit && !isWithdrawal && !isPendingPayment) return null;
+    // Accept all transaction types
+    if (!isDeposit && !isWithdrawal && !isPendingPayment && !isTournamentFee && !isTransferSent && !isTransferReceived) return null;
 
     const amount = Number(tx.amount || 0);
     const provider = tx.provider || '';
     
-    // Generate proper description for cashout
-    let description = isDeposit || isPendingPayment ? 'Deposit' : 'Cashout';
-    if (isWithdrawal && provider) {
+    // Generate description based on transaction type
+    let description = '';
+    let displayType: Transaction['type'] = 'DEPOSIT';
+    let displayAmount = amount;
+    
+    if (isDeposit || isPendingPayment) {
+      displayType = 'DEPOSIT';
+      description = isPendingPayment 
+        ? `${provider ? provider.toUpperCase() + ' ' : ''}Deposit - Pending Confirmation`
+        : 'Deposit';
+      displayAmount = amount;
+    } else if (isWithdrawal) {
+      displayType = 'WITHDRAWAL';
       description = provider === 'bank' ? 'Bank Transfer Cashout' : `${provider.toUpperCase()} Cashout`;
-    }
-    // Special description for pending payment
-    if (isPendingPayment) {
-      description = `${provider ? provider.toUpperCase() + ' ' : ''}Deposit - Pending Confirmation`;
+      displayAmount = -amount;
+    } else if (isTournamentFee) {
+      displayType = 'TOURNAMENT_FEE';
+      description = 'Tournament Entry Fee';
+      displayAmount = -amount;
+    } else if (isTransferSent) {
+      displayType = 'TRANSFER_SENT';
+      description = tx.description || 'Money Sent';
+      displayAmount = -amount;
+    } else if (isTransferReceived) {
+      displayType = 'TRANSFER_RECEIVED';
+      description = tx.description || 'Money Received';
+      displayAmount = amount;
     }
 
     return {
-      id: tx.id || tx.depositId || tx.withdrawalId || tx.referenceNumber,
-      type: isDeposit || isPendingPayment ? 'DEPOSIT' : 'WITHDRAWAL',
-      amount: (isDeposit || isPendingPayment) ? amount : -amount,
+      id: tx.id || tx.depositId || tx.withdrawalId || tx.feeId || tx.transferId || tx.referenceNumber,
+      type: displayType,
+      amount: displayAmount,
       status: normalizeStatus(tx.status),
       description,
-      createdAt: tx.createdAt || tx.completedAt || new Date().toISOString(),
+      createdAt: tx.createdAt || tx.completedAt || tx.processedAt || new Date().toISOString(),
       paymentMethod: provider || undefined,
-      reference: tx.referenceNumber || undefined
+      reference: tx.referenceNumber || undefined,
+      direction: (isTransferSent || isTransferReceived) ? tx.direction as 'sent' | 'received' : undefined,
+      tournamentId: tx.tournamentId || undefined,
+      seasonId: tx.seasonId || undefined
     };
   };
 
   const refreshTransactions = async (token: string) => {
     if (!token) return;
-    const paymentTxResponse = await paymentApi.getTransactionHistory(token);
-    const paymentTxs = paymentTxResponse?.data || paymentTxResponse || [];
+    try {
+      const paymentTxResponse = await paymentApi.getTransactionHistory(token);
+      const paymentTxs = paymentTxResponse?.data || paymentTxResponse || [];
 
-    const normalizedPaymentTxs = Array.isArray(paymentTxs)
-      ? paymentTxs
-          .map((tx: any) => normalizePaymentTransaction(tx))
-          .filter(Boolean) as Transaction[]
-      : [];
+      const normalizedPaymentTxs = Array.isArray(paymentTxs)
+        ? paymentTxs
+            .map((tx: any) => normalizePaymentTransaction(tx))
+            .filter(Boolean) as Transaction[]
+        : [];
 
-    const combined = [...normalizedPaymentTxs].sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+      const combined = [...normalizedPaymentTxs].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
 
-    setTransactions(combined);
+      setTransactions(combined);
+      setTransactionError(null);
+    } catch (error) {
+      console.error('Failed to get transaction history:', error);
+      setTransactionError('Failed to get transaction history. Please try again.');
+    }
   };
 
   const getAccessToken = async () => {
@@ -602,6 +659,117 @@ const WalletPage: React.FC = () => {
     }
   };
 
+  const handleTransferFunds = async () => {
+    if (!walletId) {
+      showAlert('Error', 'Wallet not ready. Please refresh and try again.', 'error');
+      return;
+    }
+
+    if (!transferAmount || !transferPhoneNumber) {
+      showAlert('Error', 'Please enter amount and recipient phone number', 'error');
+      return;
+    }
+
+    if (!session?.user?.userId) {
+      showAlert('Authentication Required', 'Please login to transfer funds', 'error');
+      return;
+    }
+    if (!transferRecipient || !transferConfirmed) {
+      showAlert('Confirm Recipient', 'Please confirm the recipient before sending.', 'error');
+      return;
+    }
+
+    const parsedTransferAmount = parseFloat(transferAmount);
+    if (isNaN(parsedTransferAmount) || parsedTransferAmount <= 0) {
+      showAlert('Error', 'Please enter a valid amount', 'error');
+      return;
+    }
+
+    if (parsedTransferAmount > balance) {
+      showAlert('Insufficient Balance', 'You do not have enough balance to transfer.', 'error');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const token = await getAccessToken();
+      if (!token) {
+        showAlert('Authentication Required', 'Please login to transfer funds', 'error');
+        return;
+      }
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/payment/transfer`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          fromWalletId: walletId,
+          userId: session.user.userId,
+          toPhoneNumber: transferPhoneNumber,
+          amount: parsedTransferAmount,
+          description: transferDescription || undefined
+        })
+      });
+
+      const rawResponse = await response.text();
+      const trimmed = rawResponse.trim();
+      let data: any = null;
+      if (trimmed) {
+        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+          try {
+            data = JSON.parse(trimmed);
+          } catch (parseError) {
+            console.error('Transfer response JSON parse error:', parseError, trimmed.slice(0, 200));
+            data = { success: false, error: 'Invalid response from server' };
+          }
+        } else {
+          data = { success: false, error: trimmed };
+        }
+      } else {
+        data = { success: response.ok };
+      }
+      if (!response.ok && !data?.error) {
+        data = { ...data, success: false, error: `Transfer failed (${response.status})` };
+      }
+      
+      if (data?.success) {
+        // Update balance immediately (instant transfer)
+        const newBalance = balance - parsedTransferAmount;
+        setBalance(newBalance);
+
+        // Create transaction record
+        const newTransaction: Transaction = {
+          id: data.data?.transferId || Date.now().toString(),
+          type: 'TRANSFER_SENT',
+          amount: -parsedTransferAmount,
+          status: 'COMPLETED',
+          description: transferDescription || 'Money Sent',
+          createdAt: new Date().toISOString(),
+          reference: data.data?.referenceNumber || `TXFR${Date.now()}`
+        };
+
+        setTransactions([newTransaction, ...transactions]);
+        
+        setTransferAmount('');
+        setTransferPhoneNumber('');
+        setTransferDescription('');
+        setTransferRecipient(null);
+        setTransferConfirmed(false);
+        showAlert('Transfer Successful', `Successfully sent Tsh ${parsedTransferAmount.toLocaleString()} to ${transferPhoneNumber}`, 'success');
+      } else {
+        showAlert('Transfer Failed', data?.error || 'Failed to transfer funds', 'error');
+      }
+    } catch (error: any) {
+      console.error('Transfer error:', error);
+      const errorMessage = error?.message || 'Failed to transfer funds. Please try again.';
+      showAlert('Transfer Failed', errorMessage, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const normalizeDisplayStatus = (status: string) => {
     switch (status) {
       case 'COMPLETED':
@@ -618,6 +786,84 @@ const WalletPage: React.FC = () => {
         return status;
     }
   };
+
+  const normalizePhoneNumber = (phone: string) => {
+    const cleaned = phone.replace(/\s+/g, '');
+    if (cleaned.startsWith('0')) {
+      return `+255${cleaned.slice(1)}`;
+    }
+    if (!cleaned.startsWith('+')) {
+      return `+255${cleaned}`;
+    }
+    return cleaned;
+  };
+
+  useEffect(() => {
+    if (!transferPhoneNumber) {
+      setTransferRecipient(null);
+      setTransferLookupError(null);
+      setTransferConfirmed(false);
+      return;
+    }
+
+    const trimmed = transferPhoneNumber.trim();
+    if (trimmed.length < 9) {
+      setTransferRecipient(null);
+      setTransferLookupError(null);
+      setTransferConfirmed(false);
+      return;
+    }
+
+    setTransferConfirmed(false);
+    const timeout = setTimeout(async () => {
+      const token = await getAccessToken();
+      if (!token) return;
+      setTransferLookupLoading(true);
+      setTransferLookupError(null);
+      try {
+        const normalized = normalizePhoneNumber(trimmed);
+        const lookupResponse = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/wallet/transfer/lookup/phone/${encodeURIComponent(normalized)}`,
+          {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${token}` }
+          }
+        );
+        const raw = await lookupResponse.text();
+        const trimmedRaw = raw.trim();
+        let parsed: any = null;
+        if (trimmedRaw) {
+          if (trimmedRaw.startsWith('{') || trimmedRaw.startsWith('[')) {
+            try {
+              parsed = JSON.parse(trimmedRaw);
+            } catch (parseError) {
+              console.error('Recipient lookup JSON parse error:', parseError, trimmedRaw.slice(0, 200));
+            }
+          } else {
+            parsed = { success: false, error: trimmedRaw };
+          }
+        }
+        if (!lookupResponse.ok || !parsed?.success) {
+          const fallbackError =
+            lookupResponse.status === 404 ? 'Recipient not found' : 'Failed to lookup recipient';
+          setTransferRecipient(null);
+          setTransferLookupError(parsed?.error || fallbackError);
+          return;
+        }
+        const user = parsed?.data?.user;
+        setTransferRecipient(user || null);
+        setTransferLookupError(null);
+      } catch (error) {
+        console.error('Recipient lookup failed:', error);
+        setTransferRecipient(null);
+        setTransferLookupError('Failed to lookup recipient');
+      } finally {
+        setTransferLookupLoading(false);
+      }
+    }, 450);
+
+    return () => clearTimeout(timeout);
+  }, [transferPhoneNumber]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -664,9 +910,14 @@ const WalletPage: React.FC = () => {
       case 'WITHDRAWAL':
         return <ArrowUpRight className="w-5 h-5 text-red-400" />;
       case 'TOURNAMENT_ENTRY':
+      case 'TOURNAMENT_FEE':
         return <Minus className="w-5 h-5 text-orange-400" />;
       case 'WINNINGS':
         return <TrendingUp className="w-5 h-5 text-purple-400" />;
+      case 'TRANSFER_SENT':
+        return <Send className="w-5 h-5 text-blue-400" />;
+      case 'TRANSFER_RECEIVED':
+        return <Download className="w-5 h-5 text-green-400" />;
       default:
         return <Wallet className="w-5 h-5 text-gray-400" />;
     }
@@ -696,14 +947,24 @@ const WalletPage: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-white mb-1">Wallet</h1>
-        <p className="text-white/70">Manage your funds and transactions</p>
-      </div>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.12),_transparent_55%),radial-gradient(circle_at_20%_30%,_rgba(16,185,129,0.12),_transparent_55%),linear-gradient(180deg,_#0a0f1b_0%,_#070a13_50%,_#06080f_100%)] text-white">
+      <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
+        <header className="rounded-3xl border border-white/10 bg-white/5 p-6 sm:p-8 backdrop-blur">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-emerald-200/80">Wallet Control</p>
+              <h1 className="mt-2 text-4xl font-semibold">Enterprise Wallet</h1>
+              <p className="mt-2 text-sm text-white/70">
+                Track balances, manage transfers, and reconcile transactions in real time.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-white/60">
+              <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-emerald-200">Instant Transfers</span>
+              <span className="rounded-full bg-blue-500/10 px-3 py-1 text-blue-200">Mobile Money Ready</span>
+            </div>
+          </div>
+        </header>
 
-        {/* Balance Card */}
         <Card className="bg-white/5 border-white/10">
           <CardHeader className="pb-4">
             <div className="flex items-center justify-between">
@@ -718,38 +979,59 @@ const WalletPage: React.FC = () => {
               </Button>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-5">
             <div className="flex items-baseline space-x-2">
-              <span className="text-3xl font-bold text-white">Tsh</span>
+              <span className="text-2xl font-semibold text-white/80">Tsh</span>
               <span className={`text-5xl font-bold ${showBalance ? 'text-white' : 'blur-sm text-white/50'}`}>
                 {showBalance ? balance.toLocaleString() : '••••'}
               </span>
             </div>
-            <div className="mt-4 flex items-center space-x-2">
-              <Badge className="bg-green-500/20 text-green-300 border-green-500/30">
-                <CheckCircle className="w-3 h-3 mr-1" />
-                Active Account
-              </Badge>
-              <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30">
-                lipa namba Enabled
-              </Badge>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs">
+                <p className="text-white/50">Receive Number</p>
+                <p className="mt-1 text-sm font-semibold">
+                  {session?.user?.phoneNumber || 'Not set'}
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs">
+                <p className="text-white/50">Wallet ID</p>
+                <p className="mt-1 text-sm font-semibold break-all">
+                  {walletId || '—'}
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs">
+                <p className="text-white/50">Status</p>
+                <div className="mt-1 flex flex-wrap gap-2">
+                  <Badge className="bg-green-500/20 text-green-300 border-green-500/30">
+                    <CheckCircle className="w-3 h-3 mr-1" />
+                    Active
+                  </Badge>
+                  <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30">
+                    Lipa namba enabled
+                  </Badge>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
 
-      <Tabs defaultValue="transactions" className="space-y-6">
-          <TabsList className="bg-white/5 border border-white/10">
-            <TabsTrigger value="transactions" className="text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white data-[state=active]:border-white/20">
+        <Tabs defaultValue="transactions" className="space-y-6">
+          <TabsList className="bg-white/5 border border-white/10 flex h-12 w-full flex-nowrap items-center justify-start gap-2 overflow-x-auto px-2 pr-4 snap-x snap-mandatory no-scrollbar">
+            <TabsTrigger value="transactions" className="min-w-[140px] shrink-0 flex-none snap-start text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white data-[state=active]:border-white/20">
               <History className="w-4 h-4 mr-2" />
               Transactions
             </TabsTrigger>
-            <TabsTrigger value="add-funds" className="text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white data-[state=active]:border-white/20">
+            <TabsTrigger value="add-funds" className="min-w-[140px] shrink-0 flex-none snap-start text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white data-[state=active]:border-white/20">
               <Plus className="w-4 h-4 mr-2" />
               Add Funds
             </TabsTrigger>
-            <TabsTrigger value="withdraw" className="text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white data-[state=active]:border-white/20">
+            <TabsTrigger value="withdraw" className="min-w-[140px] shrink-0 flex-none snap-start text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white data-[state=active]:border-white/20">
               <Minus className="w-4 h-4 mr-2" />
               Cashout
+            </TabsTrigger>
+            <TabsTrigger value="transfer" className="min-w-[140px] shrink-0 flex-none snap-start text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white data-[state=active]:border-white/20">
+              <Send className="w-4 h-4 mr-2" />
+              Transfer
             </TabsTrigger>
           </TabsList>
 
@@ -787,6 +1069,11 @@ const WalletPage: React.FC = () => {
                 </div>
               </CardHeader>
               <CardContent>
+                {transactionError && (
+                  <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                    {transactionError}
+                  </div>
+                )}
                 {transactions.length === 0 ? (
                   <div className="text-center py-12">
                     <Wallet className="w-16 h-16 text-purple-400 mx-auto mb-4" />
@@ -794,18 +1081,6 @@ const WalletPage: React.FC = () => {
                     <p className="text-white/60 mb-6">
                       Your transaction history will appear here once you start making deposits, withdrawals, or tournament entries.
                     </p>
-                    <div className="flex justify-center space-x-4">
-                      <Button
-                        onClick={() => {
-                          const tabsTrigger = document.querySelector('[value="add-funds"]') as HTMLElement;
-                          if (tabsTrigger) tabsTrigger.click();
-                        }}
-                        className="bg-linear-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
-                      >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Add Funds
-                      </Button>
-                    </div>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -1394,16 +1669,222 @@ const WalletPage: React.FC = () => {
               </CardContent>
             </Card>
           </TabsContent>
-      </Tabs>
 
-      {/* Alert Modal */}
-      <AlertModal
-        open={alertModal.open}
-        onOpenChange={(open) => setAlertModal({ ...alertModal, open })}
-        title={alertModal.title}
-        message={alertModal.message}
-        type={alertModal.type}
-      />
+          <TabsContent value="transfer" className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Send Money Card */}
+              <Card className="bg-white/5 border-white/10">
+                <CardHeader>
+                  <CardTitle className="text-white">Send Money</CardTitle>
+                  <CardDescription className="text-white/60">
+                    Transfer funds to another player wallet
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-white/70 mb-2">
+                      Recipient Phone Number
+                    </label>
+                    <input
+                      type="tel"
+                      value={transferPhoneNumber}
+                      onChange={(e) => setTransferPhoneNumber(e.target.value)}
+                      className="w-full p-3 rounded-lg bg-black/20 border border-white/10 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      placeholder="+255 7xx xxx xxx"
+                    />
+                  </div>
+
+                  <div className="rounded-lg border border-white/10 bg-black/20 p-4 text-sm text-white/70">
+                    {transferLookupLoading && (
+                      <div className="flex items-center gap-2 text-blue-200">
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        Looking up recipient...
+                      </div>
+                    )}
+                    {!transferLookupLoading && transferLookupError && (
+                      <div className="text-red-300">{transferLookupError}</div>
+                    )}
+                    {!transferLookupLoading && transferRecipient && (
+                      <div className="space-y-2">
+                        <p className="text-xs uppercase tracking-wide text-white/40">Recipient</p>
+                        <p className="text-base text-white font-semibold">
+                          {transferRecipient.firstName || transferRecipient.lastName
+                            ? `${transferRecipient.firstName || ''} ${transferRecipient.lastName || ''}`.trim()
+                            : transferRecipient.username || 'User'}
+                        </p>
+                        <p className="text-xs text-white/50">{transferRecipient.phoneNumber || transferPhoneNumber}</p>
+                        <label className="mt-2 flex items-center gap-2 text-xs text-white/70">
+                          <input
+                            type="checkbox"
+                            checked={transferConfirmed}
+                            onChange={(e) => setTransferConfirmed(e.target.checked)}
+                            className="rounded border-white/20 bg-black/30 text-purple-500"
+                          />
+                          I confirm this is the correct recipient.
+                        </label>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-white/70 mb-2">
+                      Amount (Tsh)
+                    </label>
+                    <input
+                      type="number"
+                      value={transferAmount}
+                      onChange={(e) => setTransferAmount(e.target.value)}
+                      className="w-full p-3 rounded-lg bg-black/20 border border-white/10 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      placeholder="Enter amount"
+                      min="1000"
+                      max={balance}
+                    />
+                    <p className="text-xs text-white/60 mt-1">
+                      Available balance: Tsh {balance.toLocaleString()} • Minimum: Tsh 1,000
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-white/70 mb-2">
+                      Description (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={transferDescription}
+                      onChange={(e) => setTransferDescription(e.target.value)}
+                      className="w-full p-3 rounded-lg bg-black/20 border border-white/10 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      placeholder="e.g., Game winnings, Loan repayment"
+                      maxLength={100}
+                    />
+                  </div>
+
+                  <Button
+                    onClick={handleTransferFunds}
+                    disabled={
+                      loading ||
+                      !transferAmount ||
+                      !transferPhoneNumber ||
+                      !transferRecipient ||
+                      !transferConfirmed ||
+                      parseFloat(transferAmount) > balance ||
+                      parseFloat(transferAmount) < 1000
+                    }
+                    className="w-full bg-linear-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                  >
+                    {loading ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4 mr-2" />
+                        Send Money - Tsh {transferAmount ? parseFloat(transferAmount).toLocaleString() : '0'}
+                      </>
+                    )}
+                  </Button>
+
+                  <div className="rounded-lg p-4 bg-white/5 border border-white/10">
+                    <div className="flex items-start space-x-3">
+                      <AlertCircle className="w-5 h-5 text-blue-400 mt-0.5" />
+                      <div>
+                        <h4 className="text-white font-medium mb-1">Transfer Information</h4>
+                        <ul className="text-sm text-white/60 space-y-1">
+                          <li>• Minimum transfer: Tsh 1,000</li>
+                          <li>• No transaction fee for transfers</li>
+                          <li>• Instant processing (no approval needed)</li>
+                          <li>• Enter recipient's phone number to send money</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Receive Money Card */}
+              <Card className="bg-white/5 border-white/10">
+                <CardHeader>
+                  <CardTitle className="text-white">Receive Money</CardTitle>
+                  <CardDescription className="text-white/60">
+                    Share your phone number to receive transfers
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="rounded-lg p-6 bg-gradient-to-br from-purple-500/15 to-pink-500/15 border border-purple-500/30">
+                    <div className="text-center space-y-4">
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-white/50 mb-2">
+                          Your Mobile Money Number
+                        </p>
+                        <div className="flex items-center justify-center gap-3">
+                          <p className="text-2xl font-bold text-white break-all">
+                            {session?.user?.phoneNumber || walletId || 'Loading...'}
+                          </p>
+                          <Button
+                            onClick={copyWalletNumber}
+                            disabled={!session?.user?.phoneNumber && !walletId}
+                            variant="ghost"
+                            size="sm"
+                            className="text-white/70 hover:text-white hover:bg-white/10"
+                          >
+                            {walletNumberCopied ? (
+                              <Check className="w-5 h-5 text-green-400" />
+                            ) : (
+                              <Copy className="w-5 h-5" />
+                            )}
+                          </Button>
+                        </div>
+                        {walletNumberCopied && (
+                          <p className="text-sm text-green-400">Copied to clipboard!</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg p-4 bg-white/5 border border-white/10">
+                    <div className="flex items-start space-x-3">
+                      <Smartphone className="w-5 h-5 text-purple-400 mt-0.5" />
+                      <div>
+                        <h4 className="text-white font-medium mb-1">How to Receive Money</h4>
+                        <ol className="text-sm text-white/60 space-y-2 list-decimal list-inside">
+                          <li>Share your phone number above with others</li>
+                          <li>They can send money to your wallet using this number</li>
+                          <li>Transfers are instant with no fees</li>
+                          <li>Use the copy button to easily share your phone number</li>
+                        </ol>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg p-4 bg-white/5 border border-white/10">
+                    <div className="flex items-start space-x-3">
+                      <CheckCircle className="w-5 h-5 text-green-400 mt-0.5" />
+                      <div>
+                        <h4 className="text-white font-medium mb-1">Security Tips</h4>
+                        <ul className="text-sm text-white/60 space-y-1">
+                          <li>• Only share your phone number with trusted people</li>
+                          <li>• Verify the recipient's phone number before sending</li>
+                          <li>• All transfers are recorded for your security</li>
+                          <li>• Contact support if you notice any suspicious activity</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+        </Tabs>
+
+        {/* Alert Modal */}
+        <AlertModal
+          open={alertModal.open}
+          onOpenChange={(open) => setAlertModal({ ...alertModal, open })}
+          title={alertModal.title}
+          message={alertModal.message}
+          type={alertModal.type}
+        />
+      </div>
     </div>
   );
 };
