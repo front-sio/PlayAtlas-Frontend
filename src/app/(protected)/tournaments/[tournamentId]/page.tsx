@@ -83,6 +83,19 @@ export default function TournamentDetailPage() {
   const socketUrl = useMemo(() => apiBase.replace(/\/api\/?$/, ''), [apiBase]);
   const socketTarget = useMemo(() => normalizeSocketTarget(socketUrl), [socketUrl]);
 
+  const todaySeasons = useMemo(() => {
+    const now = new Date();
+    return seasons.filter((season) => {
+      if (!season.startTime) return false;
+      const start = new Date(season.startTime);
+      return (
+        start.getFullYear() === now.getFullYear() &&
+        start.getMonth() === now.getMonth() &&
+        start.getDate() === now.getDate()
+      );
+    });
+  }, [seasons]);
+
   const loadTournamentData = async () => {
     if (!tournamentId) return;
     try {
@@ -110,9 +123,10 @@ export default function TournamentDetailPage() {
   }, [tournamentId, token]);
 
   useEffect(() => {
-    if (!tournamentId) return;
+    if (!tournamentId || !token) return;
     const s = io(socketTarget.url, {
       path: socketTarget.path,
+      auth: token ? { token } : undefined,
       transports: ['websocket'],
       reconnection: true,
       reconnectionAttempts: 5,
@@ -122,11 +136,7 @@ export default function TournamentDetailPage() {
     socketRef.current = s;
 
     s.on('connect', () => {
-      const player = session?.user?.userId;
-      if (player && token) {
-        s.emit('authenticate', { playerId: player, token });
-      }
-      s.emit('join:season', { tournamentId });
+      s.emit('join:tournament', String(tournamentId));
     });
 
     s.on('season:matches_generated', (payload: any) => {
@@ -136,6 +146,12 @@ export default function TournamentDetailPage() {
     });
 
     s.on('season:completed', (payload: any) => {
+      if (payload?.tournamentId === tournamentId) {
+        loadTournamentData();
+      }
+    });
+
+    s.on('tournament:seasons:update', (payload: any) => {
       if (payload?.tournamentId === tournamentId) {
         loadTournamentData();
       }
@@ -308,9 +324,10 @@ export default function TournamentDetailPage() {
                 Scheduled Match Flow
               </h2>
             </div>
-            <span className="text-xs text-white/50">
-              Last updated: {lastUpdated.toLocaleTimeString()}
-            </span>
+            <div className="text-right text-xs text-white/50">
+              <div>Today: {todaySeasons.length} season{todaySeasons.length === 1 ? '' : 's'}</div>
+              <div>Last updated: {lastUpdated.toLocaleTimeString()}</div>
+            </div>
           </div>
 
           {seasons.length === 0 ? (
@@ -320,6 +337,9 @@ export default function TournamentDetailPage() {
               {seasons.map((season) => {
                 const disabledReason = getJoinDisabledReason(season);
                 const showJoin = season.status === 'upcoming';
+                const isToday =
+                  !!season.startTime &&
+                  todaySeasons.some((today) => today.seasonId === season.seasonId);
                 return (
                   <div
                     key={season.seasonId}
@@ -332,6 +352,11 @@ export default function TournamentDetailPage() {
                           <Badge className={`${statusColor(season.status)} text-white`}>
                             {getStatusLabel(season.status)}
                           </Badge>
+                          {isToday && (
+                            <Badge className="bg-amber-500/20 text-amber-200 border-amber-500/30">
+                              Today
+                            </Badge>
+                          )}
                         </div>
                         <div className="flex flex-wrap items-center gap-2 text-xs text-white/60">
                           <span className="rounded-full bg-white/10 px-3 py-1">
