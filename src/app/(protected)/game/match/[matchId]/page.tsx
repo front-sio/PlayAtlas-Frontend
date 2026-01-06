@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { tournamentApi, matchmakingApi, walletApi } from '@/lib/apiService';
+import { tournamentApi, matchmakingApi, walletApi, lookupApi } from '@/lib/apiService';
 import { Button } from '@/components/ui/button';
 import { Clock, Wifi, WifiOff } from 'lucide-react';
 
@@ -16,6 +16,9 @@ type Match = {
   status: string;
   startedAt?: string | null;
   endedAt?: string | null;
+  metadata?: {
+    matchDurationSeconds?: number;
+  } | null;
 };
 
 export default function PlayMatchPage() {
@@ -29,8 +32,14 @@ export default function PlayMatchPage() {
   const [match, setMatch] = useState<Match | null>(null);
   const [canPlay, setCanPlay] = useState(false);
   const [iframeLoaded, setIframeLoaded] = useState(false);
+  const [scoreState, setScoreState] = useState({ player1: 0, player2: 0 });
+  const resultSentRef = useRef(false);
+  const [playerNames, setPlayerNames] = useState<{ player1?: string; player2?: string }>({});
 
-  const MATCH_MAX_SECONDS = 300;
+  const matchDurationSeconds = useMemo(() => {
+    const raw = match?.metadata?.matchDurationSeconds;
+    return Number(raw || 300);
+  }, [match]);
 
   const iframeSrc = useMemo(() => {
     if (!match || !session?.user) return '';
@@ -39,10 +48,15 @@ export default function PlayMatchPage() {
       autostart: '1',
       mode: 'match',
       matchId: String(matchId),
+      matchDurationSeconds: String(matchDurationSeconds),
+      player1Id: match.player1Id,
+      player2Id: match.player2Id,
+      player1Name: playerNames.player1 || '',
+      player2Name: playerNames.player2 || ''
     });
     // Use original 8ball for multiplayer matches
-    return `/8ball/index.html?${params.toString()}`;
-  }, [match, matchId, session?.user]);
+    return `/8ball-match/index.html?${params.toString()}`;
+  }, [match, matchDurationSeconds, matchId, playerNames, session?.user]);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -99,7 +113,7 @@ export default function PlayMatchPage() {
           throw new Error('Match has ended');
         }
         if (matchData.startedAt) {
-          const matchEndTime = new Date(matchData.startedAt).getTime() + MATCH_MAX_SECONDS * 1000;
+          const matchEndTime = new Date(matchData.startedAt).getTime() + matchDurationSeconds * 1000;
           if (Date.now() > matchEndTime) {
             throw new Error('Match time has expired');
           }
@@ -108,6 +122,22 @@ export default function PlayMatchPage() {
         await walletApi.getWallet(session?.accessToken || '');
 
         setMatch(matchData);
+        const opponentId = matchData.player1Id === playerId ? matchData.player2Id : matchData.player1Id;
+        const lookup = await lookupApi.resolveMatchLookups(
+          {
+            opponentIds: [opponentId],
+            tournamentIds: [matchData.tournamentId]
+          },
+          session?.accessToken
+        ).catch(() => null);
+
+        const opponents = lookup?.data?.data?.opponents || lookup?.data?.opponents || {};
+        const opponentName = opponents?.[opponentId];
+        const currentName = session?.user?.username || `${session?.user?.firstName || ''} ${session?.user?.lastName || ''}`.trim();
+        setPlayerNames({
+          player1: matchData.player1Id === playerId ? currentName : (opponentName || matchData.player1Id),
+          player2: matchData.player2Id === playerId ? currentName : (opponentName || matchData.player2Id)
+        });
         setCanPlay(true);
       } catch (err: any) {
         setError(err?.message || 'Failed to load match');
@@ -120,7 +150,7 @@ export default function PlayMatchPage() {
     if (status === 'authenticated') {
       run();
     }
-  }, [matchId, playerId, status, session?.accessToken]);
+  }, [matchId, playerId, status, session?.accessToken, matchDurationSeconds]);
 
   // Send player data to iframe when it loads
   useEffect(() => {
@@ -145,7 +175,7 @@ export default function PlayMatchPage() {
 
   // Listen for game events from iframe
   useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
+    const handleMessage = async (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
       
       const { type, data } = event.data;
@@ -153,13 +183,30 @@ export default function PlayMatchPage() {
         case 'GAME_STATE_CHANGED':
           console.log('Game state changed:', data.state);
           break;
-        case 'MATCH_COMPLETED':
-          console.log('Match completed:', data);
-          // Redirect after match completion
+        case 'SCORE_UPDATE':
+          setScoreState({
+            player1: Number(data?.player1Score || 0),
+            player2: Number(data?.player2Score || 0)
+          });
+          break;
+        case 'MATCH_COMPLETED': {
+          if (resultSentRef.current || !match) break;
+          resultSentRef.current = true;
+          const winnerId = data?.winnerId;
+          const player1Score = Number(data?.scores?.player1 || 0);
+          const player2Score = Number(data?.scores?.player2 || 0);
+          if (winnerId) {
+            await matchmakingApi.updateMatchResult(
+              match.matchId,
+              { winnerId, player1Score, player2Score },
+              session?.accessToken
+            ).catch(() => null);
+          }
           setTimeout(() => {
             router.push('/game');
           }, 3000);
           break;
+        }
         case 'CONNECTION_ERROR':
           console.error('Game connection error:', data.error);
           break;
@@ -168,7 +215,7 @@ export default function PlayMatchPage() {
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [router]);
+  }, [match, router, session?.accessToken]);
 
   const handleIframeLoad = () => {
     setIframeLoaded(true);
@@ -221,6 +268,15 @@ export default function PlayMatchPage() {
           <span className="text-xs text-white/80">
             Match: {matchId?.substring(0, 8)}...
           </span>
+        </div>
+      </div>
+
+      <div className="absolute top-4 left-4 z-30 flex items-center gap-4 bg-black/60 backdrop-blur-sm rounded-full px-4 py-2 text-white/90 text-xs">
+        <div>
+          {playerNames.player1 || match.player1Id.slice(0, 6)}: {scoreState.player1}
+        </div>
+        <div>
+          {playerNames.player2 || match.player2Id.slice(0, 6)}: {scoreState.player2}
         </div>
       </div>
     </div>

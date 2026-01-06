@@ -607,6 +607,9 @@ export const matchmakingApi = {
 
   getMatch: async (matchId: string) =>
     request(`/matchmaking/match/${encodeURIComponent(matchId)}`, { method: 'GET' }),
+
+  updateMatchResult: async (matchId: string, data: any, token?: string) =>
+    request(`/matchmaking/match/${encodeURIComponent(matchId)}/result`, { method: 'PUT', token, body: data, json: true }),
 };
 
 // -------------------- Lookup API --------------------

@@ -63,6 +63,7 @@ export interface CreateTournamentData {
   entryFee: number;
   maxPlayers?: number;
   startTime?: string; // ISO8601 format
+  matchDuration?: number; // in seconds
   seasonDuration?: number; // in seconds
 }
 
