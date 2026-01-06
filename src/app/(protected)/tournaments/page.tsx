@@ -173,8 +173,11 @@ const TournamentsPage: React.FC = () => {
 
   useEffect(() => {
     if (!mounted) return;
+    const token = (session as any)?.accessToken as string | undefined;
+    if (!token) return;
     const s = io(socketTarget.url, {
       path: socketTarget.path,
+      auth: { token },
       transports: ['websocket'],
       reconnection: true,
       reconnectionAttempts: 5,
@@ -185,11 +188,9 @@ const TournamentsPage: React.FC = () => {
 
     s.on('connect', () => {
       setSocketConnected(true);
-      const playerId = session?.user?.userId;
-      const token = (session as any)?.accessToken;
-      if (playerId && token) {
-        s.emit('authenticate', { playerId, token });
-      }
+      tournaments.forEach((tournament) => {
+        s.emit('join:tournament', String(tournament.tournamentId));
+      });
     });
 
     s.on('disconnect', () => {
@@ -208,16 +209,22 @@ const TournamentsPage: React.FC = () => {
       }
     });
 
+    s.on('tournament:seasons:update', (payload: any) => {
+      if (payload?.tournamentId) {
+        loadSeasons(payload.tournamentId, true);
+      }
+    });
+
     return () => {
       s.disconnect();
       socketRef.current = null;
     };
-  }, [mounted, socketTarget, session]);
+  }, [mounted, socketTarget, session, tournaments]);
 
   useEffect(() => {
     if (!socketConnected || !socketRef.current) return;
     tournaments.forEach((tournament) => {
-      socketRef.current?.emit('join:season', { tournamentId: tournament.tournamentId });
+      socketRef.current?.emit('join:tournament', String(tournament.tournamentId));
     });
   }, [socketConnected, tournaments]);
 
