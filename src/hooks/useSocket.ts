@@ -27,7 +27,7 @@ export function useSocket(options: UseSocketOptions = {}) {
       auth: {
         token: token
       },
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionAttempts: 5,

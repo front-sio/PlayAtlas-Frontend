@@ -26,6 +26,7 @@ import { useSocket } from "@/hooks/useSocket";
 const NAV_ITEMS = [
   { href: "/admin", label: "Overview", icon: LayoutGrid, description: "Dashboard overview and stats" },
   { href: "/admin/finance", label: "Finance", icon: Banknote, description: "Financial management" },
+  { href: "/admin/payments", label: "Payments", icon: Wallet, description: "Deposits and cashouts" },
   { href: "/admin/deposits", label: "Deposits", icon: Wallet, description: "Manage deposit requests" },
   { href: "/admin/cashouts", label: "Cashouts", icon: ClipboardList, description: "Manage cashout requests" },
   { href: "/admin/wallets", label: "Wallets", icon: Wallet, description: "View and manage wallets" },
@@ -164,6 +165,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             badgeCount = pendingDeposits;
           } else if (item.href === "/admin/cashouts") {
             badgeCount = pendingCashouts;
+          } else if (item.href === "/admin/payments") {
+            badgeCount = pendingDeposits + pendingCashouts;
           }
           
           return (

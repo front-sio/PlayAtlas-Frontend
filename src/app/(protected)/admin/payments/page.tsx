@@ -2,11 +2,11 @@
 
 import { PaymentsDashboard } from '@/components/admin/PaymentsDashboard';
 
-export default function FinanceDashboard() {
+export default function PaymentsPage() {
   return (
     <PaymentsDashboard
-      title="Finance Dashboard"
-      subtitle="Monitor deposits and cashouts in one place."
+      title="Payments Dashboard"
+      subtitle="Unified view of deposits and cashouts."
     />
   );
 }

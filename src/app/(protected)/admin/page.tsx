@@ -12,7 +12,6 @@ import {
   Users,
   UserPlus,
   Wallet,
-  DollarSign,
   TrendingUp,
   Gamepad2,
   Activity,
@@ -25,12 +24,20 @@ export default function AdminPage() {
   const token = (session as any)?.accessToken;
   const [stats, setStats] = useState({
     totalUsers: 0,
+    activeUsers: 0,
+    verifiedUsers: 0,
+    newUsersLast7Days: 0,
     totalAgents: 0,
     activeTournaments: 0,
+    totalPlayers: 0,
+    activeSeasons: 0,
     pendingDeposits: 0,
     pendingCashouts: 0,
     activeSessions: 0,
     platformRevenue: 0,
+    transactionFees: 0,
+    walletCount: 0,
+    totalBalance: 0,
   });
   const [statsError, setStatsError] = useState('');
   const [statsLoading, setStatsLoading] = useState(true);
@@ -58,22 +65,13 @@ export default function AdminPage() {
       statLabel: 'Total Users'
     },
     { 
-      href: '/admin/deposits', 
-      title: 'Deposits', 
-      description: 'Review pending deposits',
+      href: '/admin/payments', 
+      title: 'Payments', 
+      description: 'Deposits and cashouts',
       icon: Wallet,
       color: 'from-green-500 to-emerald-600',
-      stat: stats.pendingDeposits,
-      statLabel: 'Pending Deposits'
-    },
-    { 
-      href: '/admin/cashouts', 
-      title: 'Cashouts', 
-      description: 'Approve withdrawal requests',
-      icon: DollarSign,
-      color: 'from-purple-500 to-pink-600',
-      stat: stats.pendingCashouts,
-      statLabel: 'Pending Cashouts'
+      stat: stats.pendingDeposits + stats.pendingCashouts,
+      statLabel: 'Pending'
     },
     { 
       href: '/admin/agents', 
@@ -130,9 +128,27 @@ export default function AdminPage() {
 
     const handleDashboardStats = (data: any) => {
       console.log('Dashboard stats updated:', data);
+      const users = data?.users || {};
+      const financial = data?.financial || {};
+      const tournaments = data?.tournaments || {};
+      const payments = data?.payments || {};
       setStats((prev) => ({
         ...prev,
-        ...data
+        totalUsers: users.totalUsers ?? data.totalUsers ?? prev.totalUsers,
+        activeUsers: users.activeUsers ?? prev.activeUsers,
+        verifiedUsers: users.verifiedUsers ?? prev.verifiedUsers,
+        newUsersLast7Days: users.newUsersLast7Days ?? prev.newUsersLast7Days,
+        totalAgents: data.totalAgents ?? prev.totalAgents,
+        activeTournaments: tournaments.activeTournaments ?? tournaments.statusCounts?.active ?? prev.activeTournaments,
+        totalPlayers: tournaments.totalPlayers ?? prev.totalPlayers,
+        activeSeasons: tournaments.activeSeasons ?? prev.activeSeasons,
+        pendingDeposits: payments.pendingDeposits ?? data.pendingDeposits ?? prev.pendingDeposits,
+        pendingCashouts: payments.pendingCashouts ?? data.pendingCashouts ?? prev.pendingCashouts,
+        activeSessions: data.activeSessions ?? prev.activeSessions,
+        platformRevenue: financial.platformRevenue ?? prev.platformRevenue,
+        transactionFees: payments.transactionFees ?? financial.transactionFees ?? prev.transactionFees,
+        walletCount: financial.walletCount ?? prev.walletCount,
+        totalBalance: financial.totalBalance ?? prev.totalBalance
       }));
       setStatsLoading(false);
     };
@@ -143,6 +159,7 @@ export default function AdminPage() {
         ...prev,
         pendingDeposits: data.pendingDeposits ?? prev.pendingDeposits,
         pendingCashouts: data.pendingCashouts ?? prev.pendingCashouts,
+        transactionFees: data.transactionFees ?? prev.transactionFees,
       }));
     };
 
@@ -178,7 +195,7 @@ export default function AdminPage() {
     if (link.href.includes('/tournaments')) return canViewTournaments(role);
     if (link.href.includes('/users')) return canManageUsers(role);
     if (link.href.includes('/agents')) return canManageUsers(role);
-    if (link.href.includes('/wallets') || link.href.includes('/deposits') || link.href.includes('/cashouts')) {
+    if (link.href.includes('/wallets') || link.href.includes('/deposits') || link.href.includes('/cashouts') || link.href.includes('/payments')) {
       return canViewWallets(role);
     }
     if (link.href.includes('/revenue')) return canViewFinancialReports(role);
@@ -188,7 +205,7 @@ export default function AdminPage() {
   return (
     <div className="space-y-6">
       {/* Stats Overview */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
@@ -201,6 +218,21 @@ export default function AdminPage() {
               {statsLoading ? '—' : stats.totalUsers}
             </div>
             <p className="mt-1 text-xs text-slate-500">Registered players</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-slate-500">Active Users</CardTitle>
+              <Activity className="h-4 w-4 text-slate-400" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-slate-900">
+              {statsLoading ? '—' : stats.activeUsers}
+            </div>
+            <p className="mt-1 text-xs text-slate-500">Active accounts</p>
           </CardContent>
         </Card>
 
@@ -222,36 +254,6 @@ export default function AdminPage() {
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-slate-500">Pending Deposits</CardTitle>
-              <AlertCircle className="h-4 w-4 text-orange-500" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-slate-900">
-              {statsLoading ? '—' : stats.pendingDeposits}
-            </div>
-            <p className="mt-1 text-xs text-slate-500">Awaiting approval</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-slate-500">Pending Cashouts</CardTitle>
-              <AlertCircle className="h-4 w-4 text-orange-500" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-slate-900">
-              {statsLoading ? '—' : stats.pendingCashouts}
-            </div>
-            <p className="mt-1 text-xs text-slate-500">Awaiting approval</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-medium text-slate-500">Active Sessions</CardTitle>
               <Gamepad2 className="h-4 w-4 text-slate-400" />
             </div>
@@ -261,6 +263,70 @@ export default function AdminPage() {
               {statsLoading ? '—' : stats.activeSessions}
             </div>
             <p className="mt-1 text-xs text-slate-500">Live games</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-slate-500">Pending Payments</CardTitle>
+              <AlertCircle className="h-4 w-4 text-orange-500" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-slate-900">
+              {statsLoading ? '—' : stats.pendingDeposits + stats.pendingCashouts}
+            </div>
+            <p className="mt-1 text-xs text-slate-500">
+              Deposits {stats.pendingDeposits} • Cashouts {stats.pendingCashouts}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-slate-500">Platform Revenue</CardTitle>
+              <TrendingUp className="h-4 w-4 text-slate-400" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-slate-900">
+              {statsLoading ? '—' : `TSH ${stats.platformRevenue.toLocaleString()}`}
+            </div>
+            <p className="mt-1 text-xs text-slate-500">System + transaction fees</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-slate-500">Wallet Balance</CardTitle>
+              <Wallet className="h-4 w-4 text-slate-400" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-slate-900">
+              {statsLoading ? '—' : `TSH ${stats.totalBalance.toLocaleString()}`}
+            </div>
+            <p className="mt-1 text-xs text-slate-500">{stats.walletCount} wallets</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-slate-500">Tournament Players</CardTitle>
+              <Users className="h-4 w-4 text-slate-400" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-slate-900">
+              {statsLoading ? '—' : stats.totalPlayers}
+            </div>
+            <p className="mt-1 text-xs text-slate-500">Active seasons {stats.activeSeasons}</p>
           </CardContent>
         </Card>
       </div>

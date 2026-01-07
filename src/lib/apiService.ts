@@ -454,6 +454,9 @@ export const paymentApi = {
     return request(`/payment/admin/transactions${query}`, { method: 'GET', token });
   },
 
+  getAdminPaymentStats: async (token: string) =>
+    request('/payment/admin/stats', { method: 'GET', token }),
+
   // Float adjustment endpoints
   requestFloatAdjustment: async (token: string, data: any) =>
     request('/payment/float-adjustment/request', { method: 'POST', token, body: data, json: true }),
@@ -535,6 +538,9 @@ export const adminApi = {
     const query = params.toString() ? `?${params.toString()}` : '';
     return request(`/admin/tournaments${query}`, { method: 'GET', token });
   },
+
+  getTournamentOverview: async (token: string, tournamentId: string) =>
+    request(`/admin/tournaments/${encodeURIComponent(tournamentId)}/overview`, { method: 'GET', token }),
 
   createTournament: async (token: string, data: any) =>
     request('/admin/tournaments', { method: 'POST', token, body: data, json: true }),

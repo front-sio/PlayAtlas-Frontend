@@ -54,7 +54,9 @@ export default function AdminGamesPage() {
       const statusParam = status === 'all' ? undefined : status;
       const result = await adminApi.getGameSessions(token, statusParam, 50);
       if (result.success && result.data) {
-        setSessions(result.data as GameSession[]);
+        const payload = result.data as any;
+        const items = payload?.data || payload?.sessions || payload;
+        setSessions(Array.isArray(items) ? items : []);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load sessions');
