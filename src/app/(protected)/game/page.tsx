@@ -168,7 +168,7 @@ export default function GameLobbyPage() {
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.12),_transparent_55%),radial-gradient(circle_at_20%_30%,_rgba(59,130,246,0.12),_transparent_55%),linear-gradient(180deg,_#0a0f1b_0%,_#070a13_50%,_#06080f_100%)] text-white">
-      <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
+      <div className="mx-auto max-w-6xl px-4 pt-10 pb-16 sm:pt-14 sm:pb-20 space-y-8">
         {error && (
           <Alert className="bg-red-500/10 border-red-500/30">
             <AlertDescription className="text-red-200">{error}</AlertDescription>
