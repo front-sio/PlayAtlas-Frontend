@@ -29,6 +29,7 @@ interface Tournament {
 interface Season {
   seasonId: string;
   seasonNumber: number;
+  name?: string | null;
   status: string;
   joiningClosed: boolean;
   matchesGenerated: boolean;
@@ -354,7 +355,7 @@ export default function TournamentDetailPage() {
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="space-y-2">
                         <div className="flex items-center gap-3">
-                          <h3 className="text-lg font-semibold">Season {season.seasonNumber}</h3>
+                          <h3 className="text-lg font-semibold">{season.name || `Season ${season.seasonNumber}`}</h3>
                           <Badge className={`${statusColor(season.status)} text-white`}>
                             {getStatusLabel(season.status)}
                           </Badge>
@@ -430,7 +431,7 @@ export default function TournamentDetailPage() {
                             onClick={() => handleJoinSeason(season)}
                             className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60"
                           >
-                            {joining === season.seasonId ? 'Joining…' : 'Join Season'}
+                            {joining === season.seasonId ? 'Joining…' : `Join ${season.name || 'Season'}`}
                           </Button>
                         )}
                         {!season.hasJoined && disabledReason && (

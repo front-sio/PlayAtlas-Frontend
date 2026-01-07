@@ -68,6 +68,7 @@ interface PlayerProfile {
 interface SeasonSummary {
   seasonId: string;
   seasonNumber: number;
+  name?: string | null;
   status: string;
   startTime: string;
   endTime: string;
@@ -682,7 +683,7 @@ const ProfilePage: React.FC = () => {
                       >
                         <div className="flex items-center justify-between">
                           <p className="text-sm font-semibold text-white">
-                            {season.tournament?.name || 'Tournament'} · Season {season.seasonNumber}
+                            {season.tournament?.name || 'Tournament'} · {season.name || `Season ${season.seasonNumber}`}
                           </p>
                           <Badge className="bg-white/10 text-white/80 border-white/10">
                             {season.status}
@@ -717,7 +718,7 @@ const ProfilePage: React.FC = () => {
                       >
                         <div className="flex items-center justify-between">
                           <p className="text-sm font-semibold text-white">
-                            {season.tournament?.name || 'Tournament'} · Season {season.seasonNumber}
+                            {season.tournament?.name || 'Tournament'} · {season.name || `Season ${season.seasonNumber}`}
                           </p>
                           <Badge className="bg-emerald-500/20 text-emerald-200 border-emerald-400/30">
                             Winner

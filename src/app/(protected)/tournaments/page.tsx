@@ -36,6 +36,7 @@ interface Wallet {
 interface Season {
   seasonId: string;
   seasonNumber: number;
+  name?: string | null;
   status: string;
   joiningClosed: boolean;
   matchesGenerated: boolean;
@@ -278,7 +279,7 @@ const TournamentsPage: React.FC = () => {
         // Update wallet balance
         setWallet(prev => prev ? { ...prev, balance: prev.balance - tournament.entryFee } : null);
 
-        alert(`Successfully joined Season ${season.seasonNumber} for: ${tournament.name}`);
+        alert(`Successfully joined ${season.name || `Season ${season.seasonNumber}`} for: ${tournament.name}`);
       } else {
         alert('Please login to join tournaments');
       }
@@ -437,7 +438,7 @@ const TournamentsPage: React.FC = () => {
                       return (
                         <div key={season.seasonId} className="rounded-2xl border border-white/10 bg-white/5 p-3">
                           <div className="flex items-center justify-between text-xs text-white/60">
-                            <span>Season {season.seasonNumber}</span>
+                            <span>{season.name || `Season ${season.seasonNumber}`}</span>
                             <span>{season.playerCount || 0} players</span>
                           </div>
                           {season.hasJoined ? (
@@ -450,7 +451,7 @@ const TournamentsPage: React.FC = () => {
                               disabled={disabled}
                               className="mt-3 w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50"
                             >
-                              {joining === season.seasonId ? 'Joining…' : `Join Season ${season.seasonNumber}`}
+                              {joining === season.seasonId ? 'Joining…' : `Join ${season.name || `Season ${season.seasonNumber}`}`}
                             </Button>
                           )}
                           {!season.hasJoined && disabledReason && (

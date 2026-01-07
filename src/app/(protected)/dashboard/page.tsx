@@ -48,6 +48,7 @@ type Season = {
   seasonId: string;
   tournamentId: string;
   seasonNumber: number;
+  name?: string | null;
   status: string;
   joiningClosed?: boolean;
   matchesGenerated?: boolean;
@@ -608,7 +609,7 @@ const DashboardPage: React.FC = () => {
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm text-white/70">Season {season.seasonNumber}</p>
+                        <p className="text-sm text-white/70">{season.name || `Season ${season.seasonNumber}`}</p>
                         <p className="text-xs text-white/50">
                           {season.startTime ? new Date(season.startTime).toLocaleString() : 'Start time TBD'}
                         </p>

@@ -27,6 +27,7 @@ type Match = {
 
 type SeasonInfo = {
   seasonId: string;
+  name?: string | null;
   status?: string | null;
   startTime?: string | null;
   endTime?: string | null;
@@ -38,6 +39,13 @@ export default function GameLobbyPage() {
   const [seasonById, setSeasonById] = useState<Record<string, SeasonInfo>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const getSeasonLabel = (seasonId?: string | null) => {
+    if (!seasonId) return '';
+    const season = seasonById[String(seasonId)];
+    if (season?.name) return season.name;
+    return `Season ${String(seasonId).slice(0, 8)}`;
+  };
 
   useEffect(() => {
     const run = async () => {
@@ -242,7 +250,7 @@ export default function GameLobbyPage() {
                         Match {m.matchId.slice(0, 8)}
                       </p>
                       <p className="text-xs text-emerald-200/80">
-                        Ready to play {m.seasonId ? `- Season ${String(m.seasonId).slice(0, 8)}` : ''}
+                        Ready to play {m.seasonId ? `- ${getSeasonLabel(m.seasonId)}` : ''}
                       </p>
                       <p className="text-xs text-white/60">
                         Scheduled: {formatTime(m.scheduledTime)}
@@ -280,7 +288,7 @@ export default function GameLobbyPage() {
                         Match {m.matchId.slice(0, 8)}
                       </p>
                       <p className="text-xs text-white/60">
-                        Scheduled {m.seasonId ? `- Season ${String(m.seasonId).slice(0, 8)}` : ''}
+                        Scheduled {m.seasonId ? `- ${getSeasonLabel(m.seasonId)}` : ''}
                       </p>
                       <p className="text-xs text-white/60">
                         Starts: {formatTime(m.scheduledTime)}
@@ -318,7 +326,7 @@ export default function GameLobbyPage() {
                         Match {m.matchId.slice(0, 8)}
                       </p>
                       <p className="text-xs text-white/60">
-                        Status: {m.status} {m.seasonId ? `- Season ${String(m.seasonId).slice(0, 8)}` : ''}
+                        Status: {m.status} {m.seasonId ? `- ${getSeasonLabel(m.seasonId)}` : ''}
                       </p>
                       <p className="text-xs text-white/60">
                         Scheduled: {formatTime(m.scheduledTime)}
