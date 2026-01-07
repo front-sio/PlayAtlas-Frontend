@@ -287,11 +287,7 @@ export default function TournamentDetailPage() {
               <p className="mt-2 text-2xl font-semibold">TSH {Number(tournament.entryFee).toLocaleString()}</p>
               <p className="text-xs text-emerald-200/80">Paid once per season</p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <p className="text-xs text-white/60">Players</p>
-              <p className="mt-2 text-2xl font-semibold">{currentPlayers}/{tournament.maxPlayers}</p>
-              <p className="text-xs text-white/50">Roster capacity</p>
-            </div>
+            
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
               <p className="text-xs text-white/60">Stage</p>
               <p className="mt-2 text-2xl font-semibold">{tournament.stage || 'registration'}</p>
@@ -343,7 +339,7 @@ export default function TournamentDetailPage() {
                   const bTime = b.startTime ? new Date(b.startTime).getTime() : 0;
                   return bTime - aTime;
                 })
-                .slice(0, 3)
+                .slice(0, 2)
                 .map((season) => {
                 const disabledReason = getJoinDisabledReason(season);
                 const showJoin = season.status === 'upcoming';
