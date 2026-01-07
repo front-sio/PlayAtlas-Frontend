@@ -404,24 +404,9 @@ const TournamentsPage: React.FC = () => {
                   <p className="text-xs text-white/50">Entry Fee</p>
                   <p className="mt-1 text-base font-semibold">Tsh {tournament.entryFee.toLocaleString()}</p>
                 </div>
-                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                  <p className="text-xs text-white/50">Roster</p>
-                  <p className="mt-1 text-base font-semibold">{tournament.currentPlayers}/{tournament.maxPlayers}</p>
-                </div>
               </div>
 
-              <div className="mt-5 space-y-2">
-                <div className="flex items-center justify-between text-xs text-white/50">
-                  <span>Seat fill</span>
-                  <span>{Math.round((tournament.currentPlayers / tournament.maxPlayers) * 100)}%</span>
-                </div>
-                <div className="h-2 w-full rounded-full bg-white/10">
-                  <div
-                    className="h-2 rounded-full bg-gradient-to-r from-emerald-400 via-emerald-500 to-amber-400"
-                    style={{ width: `${(tournament.currentPlayers / tournament.maxPlayers) * 100}%` }}
-                  />
-                </div>
-              </div>
+              
 
               <div className="mt-5 flex gap-2">
                 <Button

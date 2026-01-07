@@ -334,7 +334,17 @@ export default function TournamentDetailPage() {
             <p className="mt-6 text-sm text-white/60">No seasons available yet.</p>
           ) : (
             <div className="mt-6 grid gap-4 lg:grid-cols-2">
-              {seasons.map((season) => {
+              {[...seasons]
+                .sort((a, b) => {
+                  if (typeof a.seasonNumber === 'number' && typeof b.seasonNumber === 'number') {
+                    return b.seasonNumber - a.seasonNumber;
+                  }
+                  const aTime = a.startTime ? new Date(a.startTime).getTime() : 0;
+                  const bTime = b.startTime ? new Date(b.startTime).getTime() : 0;
+                  return bTime - aTime;
+                })
+                .slice(0, 3)
+                .map((season) => {
                 const disabledReason = getJoinDisabledReason(season);
                 const showJoin = season.status === 'upcoming';
                 const isToday =
