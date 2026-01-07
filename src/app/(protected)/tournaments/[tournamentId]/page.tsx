@@ -403,17 +403,11 @@ export default function TournamentDetailPage() {
                       </div>
                     </div>
 
-                    <div className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                    <div className="mt-4 grid grid-cols-1 gap-3 text-sm">
                       <div className="rounded-xl border border-white/10 bg-white/5 p-3">
                         <p className="text-xs text-white/60">Start</p>
                         <p className="mt-1 font-semibold">
                           {season.startTime ? new Date(season.startTime).toLocaleString() : 'TBD'}
-                        </p>
-                      </div>
-                      <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                        <p className="text-xs text-white/60">End</p>
-                        <p className="mt-1 font-semibold">
-                          {season.endTime ? new Date(season.endTime).toLocaleString() : 'TBD'}
                         </p>
                       </div>
                     </div>
