@@ -87,7 +87,11 @@ class GameSocketService {
     this.lastConnectionError = null;
 
     const gameServiceUrl = process.env.NEXT_PUBLIC_GAME_SERVICE_URL || 'http://localhost:3006';
-    const { url, path } = normalizeSocketTarget(gameServiceUrl);
+    const socketPathOverride = process.env.NEXT_PUBLIC_GAME_SOCKET_PATH;
+    const socketTarget = socketPathOverride
+      ? `${gameServiceUrl.replace(/\/$/, '')}${socketPathOverride}`
+      : gameServiceUrl;
+    const { url, path } = normalizeSocketTarget(socketTarget);
 
     console.log('[GameSocket] Connecting to:', url);
     console.log('[GameSocket] Using path:', path);

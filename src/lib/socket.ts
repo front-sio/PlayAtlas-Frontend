@@ -11,12 +11,21 @@ export function normalizeSocketTarget(rawUrl: string): SocketTarget {
     return { url: '', path: SOCKET_IO_PATH };
   }
 
-  // Remove trailing slash and socket.io if present
-  const url = trimmed
-    .replace(/\/$/, '')
-    .replace(/\/socket\.io\/?$/, '');
-  
-  console.log('[Socket] Normalized target:', { original: rawUrl, normalized: url, path: SOCKET_IO_PATH });
-  
-  return { url, path: SOCKET_IO_PATH };
+  const withoutTrailing = trimmed.replace(/\/$/, '');
+  const socketIndex = withoutTrailing.indexOf('/socket.io');
+  let url = withoutTrailing;
+  let path = SOCKET_IO_PATH;
+
+  if (socketIndex !== -1) {
+    url = withoutTrailing.slice(0, socketIndex);
+    path = withoutTrailing.slice(socketIndex);
+  }
+
+  if (!path.startsWith('/socket.io')) {
+    path = SOCKET_IO_PATH;
+  }
+
+  console.log('[Socket] Normalized target:', { original: rawUrl, normalized: url, path });
+
+  return { url, path };
 }

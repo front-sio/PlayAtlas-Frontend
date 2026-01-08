@@ -159,6 +159,8 @@ export default function PlayMatchPage() {
       if (iframe?.contentWindow) {
         const matchmakingUrl = process.env.NEXT_PUBLIC_MATCHMAKING_SERVICE_URL;
         const gameServiceUrl = process.env.NEXT_PUBLIC_GAME_SERVICE_URL;
+        const matchmakingSocketPath = process.env.NEXT_PUBLIC_MATCHMAKING_SOCKET_PATH;
+        const gameSocketPath = process.env.NEXT_PUBLIC_GAME_SOCKET_PATH;
         const currentAvatar = (session.user as any)?.avatar || (session.user as any)?.image || '';
         const player1Avatar =
           match.player1Id === session.user.userId ? currentAvatar : '';
@@ -179,7 +181,9 @@ export default function PlayMatchPage() {
             player1Avatar,
             player2Avatar,
             matchmakingUrl,
-            gameServiceUrl
+            gameServiceUrl,
+            matchmakingSocketPath,
+            gameSocketPath
           }
         };
         

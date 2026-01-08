@@ -45,7 +45,11 @@ class MatchmakingSocketService {
     }
 
     const matchmakingServiceUrl = process.env.NEXT_PUBLIC_MATCHMAKING_SERVICE_URL || 'http://localhost:3009';
-    const { url, path } = normalizeSocketTarget(matchmakingServiceUrl);
+    const socketPathOverride = process.env.NEXT_PUBLIC_MATCHMAKING_SOCKET_PATH;
+    const socketTarget = socketPathOverride
+      ? `${matchmakingServiceUrl.replace(/\/$/, '')}${socketPathOverride}`
+      : matchmakingServiceUrl;
+    const { url, path } = normalizeSocketTarget(socketTarget);
 
     this.socket = io(url, {
       path,

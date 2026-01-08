@@ -21,7 +21,9 @@
     player1Avatar: params.get('player1Avatar') || null,
     player2Avatar: params.get('player2Avatar') || null,
     matchmakingUrl: params.get('matchmakingUrl') || null,
-    gameServiceUrl: params.get('gameServiceUrl') || null
+    gameServiceUrl: params.get('gameServiceUrl') || null,
+    matchmakingSocketPath: params.get('matchmakingSocketPath') || null,
+    gameSocketPath: params.get('gameSocketPath') || null
   };
 
   const state = {
@@ -353,15 +355,38 @@
     }
   }
 
-  function loadSocketIo(url, onReady) {
+  function normalizeSocketTarget(rawUrl, fallbackPath) {
+    if (!rawUrl) {
+      return { url: null, path: fallbackPath || '/socket.io' };
+    }
+    const trimmed = String(rawUrl || '').trim();
+    if (!trimmed) {
+      return { url: null, path: fallbackPath || '/socket.io' };
+    }
+    const withoutTrailing = trimmed.replace(/\/$/, '');
+    const socketIndex = withoutTrailing.indexOf('/socket.io');
+    let url = withoutTrailing;
+    let path = fallbackPath || '/socket.io';
+    if (socketIndex !== -1) {
+      url = withoutTrailing.slice(0, socketIndex);
+      path = withoutTrailing.slice(socketIndex);
+    }
+    if (!path.startsWith('/socket.io')) {
+      path = fallbackPath || '/socket.io';
+    }
+    return { url, path };
+  }
+
+  function loadSocketIo(url, socketPath, onReady) {
     if (window.io) {
       onReady();
       return;
     }
-    if (!url) return;
-    const normalized = url.replace(/^ws(s)?:\/\//, 'http$1://');
+    const target = normalizeSocketTarget(url, socketPath);
+    if (!target.url) return;
+    const normalized = target.url.replace(/^ws(s)?:\/\//, 'http$1://');
     const script = document.createElement('script');
-    script.src = `${normalized.replace(/\/$/, '')}/socket.io/socket.io.js`;
+    script.src = `${normalized.replace(/\/$/, '')}${target.path}/socket.io.js`;
     script.onload = onReady;
     script.onerror = () => {
       console.error('[8Ball] Failed to load socket.io client');
@@ -372,11 +397,17 @@
   function connectSockets() {
     if (!state.isOnlineMatch || state.socketsConnecting) return;
     if (!config.playerId || !config.token || !config.matchId) return;
-    if (!config.matchmakingUrl || !config.gameServiceUrl) return;
     if (!window.io) return;
 
     state.socketsConnecting = true;
-    state.matchmakingSocket = window.io(config.matchmakingUrl, {
+    const matchmakingTarget = normalizeSocketTarget(config.matchmakingUrl, config.matchmakingSocketPath);
+    if (!matchmakingTarget.url) {
+      state.socketsConnecting = false;
+      return;
+    }
+
+    state.matchmakingSocket = window.io(matchmakingTarget.url, {
+      path: matchmakingTarget.path,
       transports: ['websocket', 'polling'],
       auth: { token: config.token }
     });
@@ -412,9 +443,12 @@
   }
 
   function connectGameSession() {
-    if (!config.gameServiceUrl || !window.io || !state.sessionId) return;
+    if (!window.io || !state.sessionId) return;
+    const gameTarget = normalizeSocketTarget(config.gameServiceUrl || config.matchmakingUrl, config.gameSocketPath);
+    if (!gameTarget.url) return;
     if (!state.gameSocket) {
-      state.gameSocket = window.io(config.gameServiceUrl, {
+      state.gameSocket = window.io(gameTarget.url, {
+        path: gameTarget.path,
         transports: ['websocket', 'polling'],
         auth: { token: config.token }
       });
@@ -538,10 +572,15 @@
       config.player2Avatar = data.player2Avatar || config.player2Avatar;
       config.matchmakingUrl = data.matchmakingUrl || config.matchmakingUrl;
       config.gameServiceUrl = data.gameServiceUrl || config.gameServiceUrl;
+      config.matchmakingSocketPath = data.matchmakingSocketPath || config.matchmakingSocketPath;
+      config.gameSocketPath = data.gameSocketPath || config.gameSocketPath;
       state.isOnlineMatch = config.mode === 'match';
       updateProjectInfoNames();
       if (state.isOnlineMatch) {
-        loadSocketIo(config.gameServiceUrl || config.matchmakingUrl, () => {
+        loadSocketIo(
+          config.gameServiceUrl || config.matchmakingUrl,
+          config.gameSocketPath || config.matchmakingSocketPath,
+          () => {
           connectSockets();
         });
       }
@@ -549,7 +588,10 @@
   });
 
   if (state.isOnlineMatch) {
-    loadSocketIo(config.gameServiceUrl || config.matchmakingUrl, () => {
+    loadSocketIo(
+      config.gameServiceUrl || config.matchmakingUrl,
+      config.gameSocketPath || config.matchmakingSocketPath,
+      () => {
       connectSockets();
     });
   }
