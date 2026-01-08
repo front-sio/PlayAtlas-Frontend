@@ -244,7 +244,7 @@ export default function GameLobbyPage() {
           )}
 
           {hasQueue && (
-            <div className="mt-6 w-full space-y-6 max-h-[65vh] overflow-y-auto pr-1 sm:max-h-none sm:overflow-visible">
+            <div className="mt-6 w-full space-y-6 sm:max-h-[65vh] sm:overflow-y-auto sm:pr-1">
               {readyMatches.length > 0 && (
                 <div className="w-full space-y-3">
                   <h3 className="text-sm font-semibold text-emerald-200">Ready to Play</h3>
