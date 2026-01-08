@@ -173,6 +173,8 @@ export default function GameLobbyPage() {
   };
 
   const completedMatches = matches.filter((m) => m.status === 'completed');
+  const hasQueue =
+    readyMatches.length > 0 || scheduledMatches.length > 0 || otherMatches.length > 0;
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.12),_transparent_55%),radial-gradient(circle_at_20%_30%,_rgba(59,130,246,0.12),_transparent_55%),linear-gradient(180deg,_#0a0f1b_0%,_#070a13_50%,_#06080f_100%)] text-white">
@@ -235,122 +237,126 @@ export default function GameLobbyPage() {
             </div>
           )}
 
-          {readyMatches.length > 0 && (
-            <div className="mt-6 space-y-3">
-              <h3 className="text-sm font-semibold text-emerald-200">Ready to Play</h3>
-              {readyMatches.map((m) => {
-                const blockedReason = getBlockReason(m);
-                return (
-                  <div
-                    key={m.matchId}
-                    className="flex flex-col gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-4 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="min-w-0 space-y-1">
-                      <p className="truncate text-sm font-medium text-white">
-                        Match {m.matchId.slice(0, 8)}
-                      </p>
-                      <p className="text-xs text-emerald-200/80">
-                        Ready to play {m.seasonId ? `- ${getSeasonLabel(m.seasonId)}` : ''}
-                      </p>
-                      <p className="text-xs text-white/60">
-                        Scheduled: {formatTime(m.scheduledTime)}
-                      </p>
-                    </div>
-                    {blockedReason ? (
-                      <Button disabled className="border-white/20 text-white">
-                        {blockedReason}
-                      </Button>
-                    ) : (
-                      <Link href={`/game/match/${m.matchId}`}>
-                        <Button className="bg-emerald-500 hover:bg-emerald-600 text-white">
-                          Join Match
-                        </Button>
-                      </Link>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          {hasQueue && (
+            <div className="mt-6 space-y-6 max-h-[65vh] overflow-y-auto pr-1 sm:max-h-none sm:overflow-visible">
+              {readyMatches.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-emerald-200">Ready to Play</h3>
+                  {readyMatches.map((m) => {
+                    const blockedReason = getBlockReason(m);
+                    return (
+                      <div
+                        key={m.matchId}
+                        className="flex flex-col gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-4 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="min-w-0 space-y-1">
+                          <p className="truncate text-sm font-medium text-white">
+                            Match {m.matchId.slice(0, 8)}
+                          </p>
+                          <p className="text-xs text-emerald-200/80">
+                            Ready to play {m.seasonId ? `- ${getSeasonLabel(m.seasonId)}` : ''}
+                          </p>
+                          <p className="text-xs text-white/60">
+                            Scheduled: {formatTime(m.scheduledTime)}
+                          </p>
+                        </div>
+                        {blockedReason ? (
+                          <Button disabled className="border-white/20 text-white">
+                            {blockedReason}
+                          </Button>
+                        ) : (
+                          <Link href={`/game/match/${m.matchId}`}>
+                            <Button className="bg-emerald-500 hover:bg-emerald-600 text-white">
+                              Join Match
+                            </Button>
+                          </Link>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
-          {scheduledMatches.length > 0 && (
-            <div className="mt-6 space-y-3">
-              <h3 className="text-sm font-semibold text-blue-200">Scheduled</h3>
-              {scheduledMatches.map((m) => {
-                const blockedReason = getBlockReason(m);
-                return (
-                  <div
-                    key={m.matchId}
-                    className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="min-w-0 space-y-1">
-                      <p className="truncate text-sm font-medium text-white">
-                        Match {m.matchId.slice(0, 8)}
-                      </p>
-                      <p className="text-xs text-white/60">
-                        Scheduled {m.seasonId ? `- ${getSeasonLabel(m.seasonId)}` : ''}
-                      </p>
-                      <p className="text-xs text-white/60">
-                        Starts: {formatTime(m.scheduledTime)}
-                      </p>
-                    </div>
-                    {blockedReason ? (
-                      <Button disabled className="border-white/20 text-white">
-                        {blockedReason}
-                      </Button>
-                    ) : (
-                      <Link href={`/game/match/${m.matchId}`}>
-                        <Button className="border-white/20 text-white">
-                          View
-                        </Button>
-                      </Link>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+              {scheduledMatches.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-blue-200">Scheduled</h3>
+                  {scheduledMatches.map((m) => {
+                    const blockedReason = getBlockReason(m);
+                    return (
+                      <div
+                        key={m.matchId}
+                        className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="min-w-0 space-y-1">
+                          <p className="truncate text-sm font-medium text-white">
+                            Match {m.matchId.slice(0, 8)}
+                          </p>
+                          <p className="text-xs text-white/60">
+                            Scheduled {m.seasonId ? `- ${getSeasonLabel(m.seasonId)}` : ''}
+                          </p>
+                          <p className="text-xs text-white/60">
+                            Starts: {formatTime(m.scheduledTime)}
+                          </p>
+                        </div>
+                        {blockedReason ? (
+                          <Button disabled className="border-white/20 text-white">
+                            {blockedReason}
+                          </Button>
+                        ) : (
+                          <Link href={`/game/match/${m.matchId}`}>
+                            <Button className="border-white/20 text-white">
+                              View
+                            </Button>
+                          </Link>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
-          {otherMatches.length > 0 && (
-            <div className="mt-6 space-y-3">
-              <h3 className="text-sm font-semibold text-white/80">History</h3>
-              {otherMatches.map((m) => {
-                const blockedReason = getBlockReason(m);
-                return (
-                  <div
-                    key={m.matchId}
-                    className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="min-w-0 space-y-1">
-                      <p className="truncate text-sm font-medium text-white">
-                        Match {m.matchId.slice(0, 8)}
-                      </p>
-                      <p className="text-xs text-white/60">
-                        Status: {m.status} {m.seasonId ? `- ${getSeasonLabel(m.seasonId)}` : ''}
-                      </p>
-                      <p className="text-xs text-white/60">
-                        Scheduled: {formatTime(m.scheduledTime)}
-                      </p>
-                      {m.status === 'completed' && (
-                        <p className="text-xs text-white/70">
-                          Result: {getResultLabel(m) || 'Completed'} · Score {m.player1Score ?? 0}-{m.player2Score ?? 0}
-                        </p>
-                      )}
-                    </div>
-                    {blockedReason ? (
-                      <Button disabled className="border-white/20 text-white">
-                        {blockedReason}
-                      </Button>
-                    ) : (
-                      <Link href={`/game/match/${m.matchId}`}>
-                        <Button className="border-white/20 text-white">
-                          View
-                        </Button>
-                      </Link>
-                    )}
-                  </div>
-                );
-              })}
+              {otherMatches.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-white/80">History</h3>
+                  {otherMatches.map((m) => {
+                    const blockedReason = getBlockReason(m);
+                    return (
+                      <div
+                        key={m.matchId}
+                        className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="min-w-0 space-y-1">
+                          <p className="truncate text-sm font-medium text-white">
+                            Match {m.matchId.slice(0, 8)}
+                          </p>
+                          <p className="text-xs text-white/60">
+                            Status: {m.status} {m.seasonId ? `- ${getSeasonLabel(m.seasonId)}` : ''}
+                          </p>
+                          <p className="text-xs text-white/60">
+                            Scheduled: {formatTime(m.scheduledTime)}
+                          </p>
+                          {m.status === 'completed' && (
+                            <p className="text-xs text-white/70">
+                              Result: {getResultLabel(m) || 'Completed'} · Score {m.player1Score ?? 0}-{m.player2Score ?? 0}
+                            </p>
+                          )}
+                        </div>
+                        {blockedReason ? (
+                          <Button disabled className="border-white/20 text-white">
+                            {blockedReason}
+                          </Button>
+                        ) : (
+                          <Link href={`/game/match/${m.matchId}`}>
+                            <Button className="border-white/20 text-white">
+                              View
+                            </Button>
+                          </Link>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </section>

@@ -250,7 +250,7 @@ export default function PlayMatchPage() {
   }
 
   return (
-    <div className="relative w-full h-full">
+    <div className="relative w-screen h-[100dvh] overflow-hidden sm:h-screen sm:w-full">
       <iframe
         key={iframeSrc}
         src={iframeSrc}
@@ -262,7 +262,7 @@ export default function PlayMatchPage() {
       />
       
       {/* Connection status indicator */}
-      <div className="absolute top-4 right-4 z-30 flex items-center gap-3 bg-black/60 backdrop-blur-sm rounded-full px-4 py-2">
+      <div className="absolute top-4 right-4 z-30 hidden items-center gap-3 rounded-full bg-black/60 px-4 py-2 backdrop-blur-sm sm:flex">
         <div className="flex items-center gap-2">
           <Wifi className="h-4 w-4 text-green-400" />
           <span className="text-xs text-white/80">
@@ -271,7 +271,7 @@ export default function PlayMatchPage() {
         </div>
       </div>
 
-      <div className="absolute top-4 left-4 z-30 flex items-center gap-4 bg-black/60 backdrop-blur-sm rounded-full px-4 py-2 text-white/90 text-xs">
+      <div className="absolute top-4 left-4 z-30 hidden items-center gap-4 rounded-full bg-black/60 px-4 py-2 text-xs text-white/90 backdrop-blur-sm sm:flex">
         <div>
           {playerNames.player1 || match.player1Id.slice(0, 6)}: {scoreState.player1}
         </div>

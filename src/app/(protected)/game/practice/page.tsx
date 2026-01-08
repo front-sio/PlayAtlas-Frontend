@@ -76,7 +76,7 @@ export default function PlayPracticePage() {
   };
 
   return (
-    <div className="relative w-full h-full">
+    <div className="relative w-screen h-[100dvh] overflow-hidden sm:h-screen sm:w-full">
       <iframe
         key={iframeSrc}
         src={iframeSrc}
@@ -88,7 +88,7 @@ export default function PlayPracticePage() {
       />
       
       {/* Top Controls */}
-      <div className="absolute top-3 right-3 z-30 flex items-center justify-between gap-3">
+      <div className="absolute top-3 right-3 z-30 hidden items-center justify-between gap-3 sm:flex">
         {/* Back Button */}
         <Link href="/game">
           <Button 
