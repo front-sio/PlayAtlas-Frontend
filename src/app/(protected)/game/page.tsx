@@ -177,15 +177,21 @@ export default function GameLobbyPage() {
     readyMatches.length > 0 || scheduledMatches.length > 0 || otherMatches.length > 0;
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.12),_transparent_55%),radial-gradient(circle_at_20%_30%,_rgba(59,130,246,0.12),_transparent_55%),linear-gradient(180deg,_#0a0f1b_0%,_#070a13_50%,_#06080f_100%)] text-white">
-      <div className="mx-auto max-w-6xl px-4 pt-10 pb-16 sm:pt-14 sm:pb-20 space-y-8">
+    <div className="min-h-screen w-full overflow-x-hidden bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.12),_transparent_55%),radial-gradient(circle_at_20%_30%,_rgba(59,130,246,0.12),_transparent_55%),linear-gradient(180deg,_#0a0f1b_0%,_#070a13_50%,_#06080f_100%)] text-white">
+      <div
+        className="mx-auto w-full max-w-6xl px-4 pt-10 pb-16 sm:px-6 sm:pt-14 sm:pb-20 lg:px-8 space-y-8"
+        style={{
+          paddingLeft: 'calc(env(safe-area-inset-left) + 1rem)',
+          paddingRight: 'calc(env(safe-area-inset-right) + 1rem)'
+        }}
+      >
         {error && (
           <Alert className="bg-red-500/10 border-red-500/30">
             <AlertDescription className="text-red-200">{error}</AlertDescription>
           </Alert>
         )}
 
-        <section className="rounded-3xl border border-white/10 bg-white/5 p-6 sm:p-8 backdrop-blur">
+        <section className="w-full rounded-3xl border border-white/10 bg-white/5 p-6 sm:p-8 backdrop-blur">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.3em] text-emerald-200/80">Game Lobby</p>
@@ -220,7 +226,7 @@ export default function GameLobbyPage() {
           </div>
         </section>
 
-        <section className="rounded-3xl border border-white/10 bg-white/5 p-6 sm:p-8">
+        <section className="w-full rounded-3xl border border-white/10 bg-white/5 p-6 sm:p-8">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.3em] text-blue-200/80">Match Queue</p>
@@ -238,16 +244,16 @@ export default function GameLobbyPage() {
           )}
 
           {hasQueue && (
-            <div className="mt-6 space-y-6 max-h-[65vh] overflow-y-auto pr-1 sm:max-h-none sm:overflow-visible">
+            <div className="mt-6 w-full space-y-6 max-h-[65vh] overflow-y-auto pr-1 sm:max-h-none sm:overflow-visible">
               {readyMatches.length > 0 && (
-                <div className="space-y-3">
+                <div className="w-full space-y-3">
                   <h3 className="text-sm font-semibold text-emerald-200">Ready to Play</h3>
                   {readyMatches.map((m) => {
                     const blockedReason = getBlockReason(m);
                     return (
                       <div
                         key={m.matchId}
-                        className="flex flex-col gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-4 sm:flex-row sm:items-center sm:justify-between"
+                        className="flex w-full flex-col gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-4 sm:flex-row sm:items-center sm:justify-between"
                       >
                         <div className="min-w-0 space-y-1">
                           <p className="truncate text-sm font-medium text-white">
@@ -278,14 +284,14 @@ export default function GameLobbyPage() {
               )}
 
               {scheduledMatches.length > 0 && (
-                <div className="space-y-3">
+                <div className="w-full space-y-3">
                   <h3 className="text-sm font-semibold text-blue-200">Scheduled</h3>
                   {scheduledMatches.map((m) => {
                     const blockedReason = getBlockReason(m);
                     return (
                       <div
                         key={m.matchId}
-                        className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 sm:flex-row sm:items-center sm:justify-between"
+                        className="flex w-full flex-col gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 sm:flex-row sm:items-center sm:justify-between"
                       >
                         <div className="min-w-0 space-y-1">
                           <p className="truncate text-sm font-medium text-white">
@@ -316,14 +322,14 @@ export default function GameLobbyPage() {
               )}
 
               {otherMatches.length > 0 && (
-                <div className="space-y-3">
+                <div className="w-full space-y-3">
                   <h3 className="text-sm font-semibold text-white/80">History</h3>
                   {otherMatches.map((m) => {
                     const blockedReason = getBlockReason(m);
                     return (
                       <div
                         key={m.matchId}
-                        className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 sm:flex-row sm:items-center sm:justify-between"
+                        className="flex w-full flex-col gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 sm:flex-row sm:items-center sm:justify-between"
                       >
                         <div className="min-w-0 space-y-1">
                           <p className="truncate text-sm font-medium text-white">

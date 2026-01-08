@@ -157,6 +157,13 @@ export default function PlayMatchPage() {
     if (iframeLoaded && session?.user && match) {
       const iframe = document.querySelector('iframe');
       if (iframe?.contentWindow) {
+        const matchmakingUrl = process.env.NEXT_PUBLIC_MATCHMAKING_SERVICE_URL;
+        const gameServiceUrl = process.env.NEXT_PUBLIC_GAME_SERVICE_URL;
+        const currentAvatar = (session.user as any)?.avatar || (session.user as any)?.image || '';
+        const player1Avatar =
+          match.player1Id === session.user.userId ? currentAvatar : '';
+        const player2Avatar =
+          match.player2Id === session.user.userId ? currentAvatar : '';
         const playerData = {
           type: 'SET_PLAYER_DATA',
           data: {
@@ -164,14 +171,22 @@ export default function PlayMatchPage() {
             playerName: session.user.username || `${session.user.firstName} ${session.user.lastName}`.trim(),
             token: session.accessToken,
             mode: 'match',
-            matchId: String(matchId)
+            matchId: String(matchId),
+            player1Id: match.player1Id,
+            player2Id: match.player2Id,
+            player1Name: playerNames.player1 || '',
+            player2Name: playerNames.player2 || '',
+            player1Avatar,
+            player2Avatar,
+            matchmakingUrl,
+            gameServiceUrl
           }
         };
         
         iframe.contentWindow.postMessage(playerData, window.location.origin);
       }
     }
-  }, [iframeLoaded, session, match, matchId]);
+  }, [iframeLoaded, session, match, matchId, playerNames]);
 
   // Listen for game events from iframe
   useEffect(() => {
