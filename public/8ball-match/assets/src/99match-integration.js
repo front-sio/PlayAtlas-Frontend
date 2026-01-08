@@ -116,23 +116,36 @@
 
   function updateIconLabels(gameInfo) {
     if (!gameInfo || !gameInfo.humanIcon || !gameInfo.aiIcon) return;
-    if (!window.game || !window.game.cache || !window.game.cache.getBitmapFont) return;
-    if (!window.game.cache.getBitmapFont('font7')) return;
+    if (!window.game || !window.game.cache) return;
+    if (!window.game.state || window.game.state.current !== 'play') return;
+    if (window.game.cache.checkBitmapFontKey && !window.game.cache.checkBitmapFontKey('font7')) return;
     const p1Label = config.player1Name || 'Player 1';
     const p2Label = config.player2Name || 'Player 2';
     const p1Initials = getPlayerInitials(p1Label) || 'P1';
     const p2Initials = getPlayerInitials(p2Label) || 'P2';
-    const p1Text = gameInfo.humanIcon.children && gameInfo.humanIcon.children.find((c) => c && c.text !== undefined);
-    const p2Text = gameInfo.aiIcon.children && gameInfo.aiIcon.children.find((c) => c && c.text !== undefined);
-    if (p1Text) p1Text.text = p1Initials;
-    if (p2Text) p2Text.text = p2Initials;
-    if (gameInfo.p1Icon && gameInfo.p1Icon.children) {
-      const label = gameInfo.p1Icon.children.find((c) => c && c.text !== undefined);
-      if (label) label.text = p1Initials;
-    }
-    if (gameInfo.p2Icon && gameInfo.p2Icon.children) {
-      const label = gameInfo.p2Icon.children.find((c) => c && c.text !== undefined);
-      if (label) label.text = p2Initials;
+    try {
+      const p1Text = gameInfo.humanIcon.children && gameInfo.humanIcon.children.find((c) => c && c.text !== undefined);
+      const p2Text = gameInfo.aiIcon.children && gameInfo.aiIcon.children.find((c) => c && c.text !== undefined);
+      if (p1Text && (!p1Text.font || window.game.cache.checkBitmapFontKey(p1Text.font))) {
+        p1Text.text = p1Initials;
+      }
+      if (p2Text && (!p2Text.font || window.game.cache.checkBitmapFontKey(p2Text.font))) {
+        p2Text.text = p2Initials;
+      }
+      if (gameInfo.p1Icon && gameInfo.p1Icon.children) {
+        const label = gameInfo.p1Icon.children.find((c) => c && c.text !== undefined);
+        if (label && (!label.font || window.game.cache.checkBitmapFontKey(label.font))) {
+          label.text = p1Initials;
+        }
+      }
+      if (gameInfo.p2Icon && gameInfo.p2Icon.children) {
+        const label = gameInfo.p2Icon.children.find((c) => c && c.text !== undefined);
+        if (label && (!label.font || window.game.cache.checkBitmapFontKey(label.font))) {
+          label.text = p2Initials;
+        }
+      }
+    } catch (err) {
+      return;
     }
     if (config.player1Avatar) {
       loadAvatarTexture(gameInfo, 'player1Avatar', config.player1Avatar, gameInfo.humanIcon);
