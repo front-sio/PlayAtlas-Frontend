@@ -116,6 +116,8 @@
 
   function updateIconLabels(gameInfo) {
     if (!gameInfo || !gameInfo.humanIcon || !gameInfo.aiIcon) return;
+    if (!window.game || !window.game.cache || !window.game.cache.getBitmapFont) return;
+    if (!window.game.cache.getBitmapFont('font7')) return;
     const p1Label = config.player1Name || 'Player 1';
     const p2Label = config.player2Name || 'Player 2';
     const p1Initials = getPlayerInitials(p1Label) || 'P1';
@@ -344,8 +346,9 @@
       return;
     }
     if (!url) return;
+    const normalized = url.replace(/^ws(s)?:\/\//, 'http$1://');
     const script = document.createElement('script');
-    script.src = `${url.replace(/\/$/, '')}/socket.io/socket.io.js`;
+    script.src = `${normalized.replace(/\/$/, '')}/socket.io/socket.io.js`;
     script.onload = onReady;
     script.onerror = () => {
       console.error('[8Ball] Failed to load socket.io client');
