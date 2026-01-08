@@ -49,7 +49,7 @@ class MatchmakingSocketService {
 
     this.socket = io(url, {
       path,
-      transports: ['websocket'],
+      transports: ['polling', 'websocket'],
       reconnection: true,
       reconnectionDelay: this.reconnectDelay,
       reconnectionAttempts: this.maxReconnectAttempts,
