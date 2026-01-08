@@ -7,6 +7,7 @@ export function ClientShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAuth = pathname?.startsWith("/auth");
   const isAdmin = pathname?.startsWith("/admin");
+  const isGameLobby = pathname === "/game";
   const isPlayMode =
     pathname?.startsWith('/game/practice') ||
     pathname?.startsWith('/game/match');
@@ -17,6 +18,15 @@ export function ClientShell({ children }: { children: React.ReactNode }) {
 
   if (isAdmin) {
     return <>{children}</>;
+  }
+
+  if (isGameLobby) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+        <AppBar />
+        <main className="w-full">{children}</main>
+      </div>
+    );
   }
 
   return (

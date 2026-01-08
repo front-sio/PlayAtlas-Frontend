@@ -60,8 +60,14 @@ export function AppBar() {
   if (pathname?.startsWith("/auth")) return null;
 
   return (
-    <header className="sticky top-0 z-50 border-b border-white/10 bg-black/30 backdrop-blur">
-      <div className="container mx-auto flex items-center justify-between px-4 py-3">
+    <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-black/30 backdrop-blur">
+      <div
+        className="container mx-auto flex items-center justify-between px-4 py-3"
+        style={{
+          paddingLeft: 'calc(env(safe-area-inset-left) + 1rem)',
+          paddingRight: 'calc(env(safe-area-inset-right) + 1rem)'
+        }}
+      >
         <Link href={isAuthed ? "/dashboard" : "/"} className="flex items-center gap-2">
           <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-r from-cyan-500 to-purple-600">
             <Trophy className="h-5 w-5 text-white" />

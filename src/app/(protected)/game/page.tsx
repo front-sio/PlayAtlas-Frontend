@@ -61,7 +61,7 @@ export default function GameLobbyPage() {
 
         const seasonIds = Array.from(new Set(matchData.map((m) => m.seasonId).filter(Boolean)));
         if (seasonIds.length > 0) {
-          const seasonEntries = await Promise.all(
+          const seasonEntries: Array<[string, SeasonInfo] | null> = await Promise.all(
             seasonIds.map(async (seasonId) => {
               try {
                 const seasonRes = await tournamentApi.getSeason(String(seasonId));
@@ -177,7 +177,7 @@ export default function GameLobbyPage() {
     readyMatches.length > 0 || scheduledMatches.length > 0 || otherMatches.length > 0;
 
   return (
-    <div className="min-h-screen w-full overflow-x-hidden bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.12),_transparent_55%),radial-gradient(circle_at_20%_30%,_rgba(59,130,246,0.12),_transparent_55%),linear-gradient(180deg,_#0a0f1b_0%,_#070a13_50%,_#06080f_100%)] text-white">
+    <div className="min-h-[calc(100dvh-64px)] w-full overflow-x-hidden bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.12),_transparent_55%),radial-gradient(circle_at_20%_30%,_rgba(59,130,246,0.12),_transparent_55%),linear-gradient(180deg,_#0a0f1b_0%,_#070a13_50%,_#06080f_100%)] text-white">
       <div
         className="mx-auto w-full max-w-6xl px-4 pt-10 pb-16 sm:px-6 sm:pt-14 sm:pb-20 lg:px-8 space-y-8"
         style={{
