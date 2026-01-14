@@ -16,6 +16,7 @@ type Match = {
   status: string;
   startedAt?: string | null;
   endedAt?: string | null;
+  gameSessionId?: string | null;
   metadata?: {
     matchDurationSeconds?: number;
   } | null;
@@ -35,6 +36,8 @@ export default function PlayMatchPage() {
   const [scoreState, setScoreState] = useState({ player1: 0, player2: 0 });
   const resultSentRef = useRef(false);
   const [playerNames, setPlayerNames] = useState<{ player1?: string; player2?: string }>({});
+  const [gameType, setGameType] = useState<'multiplayer' | 'with_ai'>('multiplayer');
+  const [winnerPrize, setWinnerPrize] = useState<number | null>(null);
 
   const matchDurationSeconds = useMemo(() => {
     const raw = match?.metadata?.matchDurationSeconds;
@@ -43,20 +46,55 @@ export default function PlayMatchPage() {
 
   const iframeSrc = useMemo(() => {
     if (!match || !session?.user) return '';
+
+    const matchmakingUrl = process.env.NEXT_PUBLIC_MATCHMAKING_SERVICE_URL || '';
+    const gameServiceUrl = process.env.NEXT_PUBLIC_GAME_SERVICE_URL || '';
+    const matchmakingSocketPath = process.env.NEXT_PUBLIC_MATCHMAKING_SOCKET_PATH || '';
+    const gameSocketPath = process.env.NEXT_PUBLIC_GAME_SOCKET_PATH || '';
+    const isAiMatch = gameType === 'with_ai';
+    const matchMode = 'match';
     
+    // Check for debug mode from URL
+    const urlParams = new URLSearchParams(window?.location?.search || '');
+    const debugMode = urlParams.get('debug') === '1';
+
     const params = new URLSearchParams({
       autostart: '1',
-      mode: 'match',
+      mode: matchMode,
       matchId: String(matchId),
       matchDurationSeconds: String(matchDurationSeconds),
       player1Id: match.player1Id,
       player2Id: match.player2Id,
-      player1Name: playerNames.player1 || '',
-      player2Name: playerNames.player2 || ''
+      matchmakingUrl,
+      gameServiceUrl,
+      matchmakingSocketPath,
+      gameSocketPath
     });
+
+    if (playerId) {
+      params.set('playerId', playerId);
+    }
+    
+    // Add gameSessionId if available
+    if (match.gameSessionId) {
+      params.set('gameSessionId', match.gameSessionId);
+    }
+    
+    // Pass debug mode to the game
+    if (debugMode) {
+      params.set('debug', '1');
+    }
+
+    if (winnerPrize && winnerPrize > 0) {
+      params.set('winnerPrize', String(winnerPrize));
+    }
+    
+    if (isAiMatch) {
+      return `/8ball-match-withai/index.html?${params.toString()}`;
+    }
     // Use original 8ball for multiplayer matches
     return `/8ball-match/index.html?${params.toString()}`;
-  }, [match, matchDurationSeconds, matchId, playerNames, session?.user]);
+  }, [match, matchDurationSeconds, matchId, session?.user, playerId, gameType, winnerPrize]);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -88,6 +126,12 @@ export default function PlayMatchPage() {
 
         const seasonRes = await tournamentApi.getSeason(matchData.seasonId);
         const seasonData = seasonRes.data as any;
+        const normalizedGameType =
+          seasonData?.tournament?.metadata?.gameType === 'with_ai' ||
+          seasonData?.tournament?.metadata?.gameType === 'ai'
+            ? 'with_ai'
+            : 'multiplayer';
+        setGameType(normalizedGameType);
         const joined = !!seasonData?.tournamentPlayers?.some(
           (p: any) => p.playerId === playerId
         );
@@ -134,9 +178,35 @@ export default function PlayMatchPage() {
         const opponents = lookup?.data?.data?.opponents || lookup?.data?.opponents || {};
         const opponentName = opponents?.[opponentId];
         const currentName = session?.user?.username || `${session?.user?.firstName || ''} ${session?.user?.lastName || ''}`.trim();
+        const aiOpponentName = normalizedGameType === 'with_ai' && !opponentName ? 'AI Opponent' : opponentName;
+        const entryFee = Number(seasonData?.tournament?.entryFee || 0);
+        const playerCount = Number(seasonData?.playerCount || seasonData?.tournamentPlayers?.length || 0);
+        const maxPlayers = Number(seasonData?.tournament?.maxPlayers || 2);
+        const totalPlayers = playerCount > 0 ? playerCount : maxPlayers;
+        const platformFeePct = 0.3;
+        const firstPctBase = 0.6;
+        const secondPctBase = 0.25;
+        const thirdPctBase = 0.15;
+        const hasSecond = totalPlayers >= 2;
+        const hasThird = totalPlayers >= 3;
+        let firstPct = firstPctBase;
+        let secondPct = hasSecond ? secondPctBase : 0;
+        let thirdPct = hasThird ? thirdPctBase : 0;
+        if (!hasThird && hasSecond) {
+          const totalPct = firstPctBase + secondPctBase;
+          if (totalPct > 0) {
+            firstPct = firstPctBase / totalPct;
+            secondPct = secondPctBase / totalPct;
+          }
+        }
+        const pot = entryFee * totalPlayers;
+        const remaining = pot * (1 - platformFeePct);
+        const prizeAmount = Math.round(remaining * firstPct);
+        setWinnerPrize(Number.isFinite(prizeAmount) ? prizeAmount : null);
+
         setPlayerNames({
-          player1: matchData.player1Id === playerId ? currentName : (opponentName || matchData.player1Id),
-          player2: matchData.player2Id === playerId ? currentName : (opponentName || matchData.player2Id)
+          player1: matchData.player1Id === playerId ? currentName : (aiOpponentName || matchData.player1Id),
+          player2: matchData.player2Id === playerId ? currentName : (aiOpponentName || matchData.player2Id)
         });
         setCanPlay(true);
       } catch (err: any) {
@@ -180,6 +250,7 @@ export default function PlayMatchPage() {
             player2Name: playerNames.player2 || '',
             player1Avatar,
             player2Avatar,
+            winnerPrize: winnerPrize || undefined,
             matchmakingUrl,
             gameServiceUrl,
             matchmakingSocketPath,
@@ -190,7 +261,31 @@ export default function PlayMatchPage() {
         iframe.contentWindow.postMessage(playerData, window.location.origin);
       }
     }
-  }, [iframeLoaded, session, match, matchId, playerNames]);
+  }, [iframeLoaded, session, match, matchId, playerNames, gameType, winnerPrize]);
+
+  useEffect(() => {
+    if (!match) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+      return '';
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      if ((event.ctrlKey || event.metaKey) && key === 'r') {
+        event.preventDefault();
+      }
+      if (event.key === 'F5') {
+        event.preventDefault();
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [match]);
 
   // Listen for game events from iframe
   useEffect(() => {
@@ -271,7 +366,6 @@ export default function PlayMatchPage() {
   return (
     <div className="relative w-screen h-[100dvh] overflow-hidden sm:h-screen sm:w-full">
       <iframe
-        key={iframeSrc}
         src={iframeSrc}
         title="8-ball match"
         className="absolute inset-0 h-full w-full border-0"

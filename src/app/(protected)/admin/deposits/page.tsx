@@ -370,7 +370,9 @@ export default function AdminDepositsPage() {
               )}
               
               {/* Action Buttons */}
-              {selectedDeposit && ['pending', 'pending_approval', 'pending_payment'].includes(selectedDeposit.status?.toLowerCase()) && (
+              {selectedDeposit && 
+                ['pending', 'pending_approval', 'pending_payment'].includes(selectedDeposit.status?.toLowerCase()) && 
+                selectedDeposit.transactionMessage && (
                 <div className="flex flex-col sm:flex-row gap-3 pt-4">
                   <Button
                     onClick={async () => {
@@ -395,6 +397,18 @@ export default function AdminDepositsPage() {
                     <XCircle className="w-4 h-4 mr-2" />
                     {processing === selectedDeposit.depositId ? 'Rejecting...' : 'Reject Deposit'}
                   </Button>
+                </div>
+              )}
+              
+              {/* Show message if no transaction message from provider */}
+              {selectedDeposit && 
+                ['pending', 'pending_approval', 'pending_payment'].includes(selectedDeposit.status?.toLowerCase()) && 
+                !selectedDeposit.transactionMessage && (
+                <div className="pt-4 text-center">
+                  <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    <AlertCircle className="w-4 h-4 inline mr-2" />
+                    No confirmation message from payment provider. Please wait for provider confirmation before approving.
+                  </div>
                 </div>
               )}
             </div>

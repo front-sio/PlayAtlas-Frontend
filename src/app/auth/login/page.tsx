@@ -146,7 +146,7 @@ const LoginPage: React.FC = () => {
 
         <Card className="bg-gray-800/50 border-gray-700">
           <CardHeader>
-            <CardTitle className="text-white">Welcome Back</CardTitle>
+            <CardTitle className="text-white">Welcome</CardTitle>
             <CardDescription className="text-gray-400">
               Enter your credentials to access your account
             </CardDescription>

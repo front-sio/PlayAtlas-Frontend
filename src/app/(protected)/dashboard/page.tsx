@@ -189,7 +189,7 @@ const DashboardPage: React.FC = () => {
       setTournamentsLoading(true);
       setTournamentsError(null);
       try {
-        const response = await tournamentApi.getTournaments(1, 50);
+        const response = await tournamentApi.getTournaments(1, 50, 'active');
         if (cancelled) return;
         setTournaments(response?.data || []);
       } catch (err) {
@@ -211,7 +211,7 @@ const DashboardPage: React.FC = () => {
     let cancelled = false;
 
     const loadLookups = async () => {
-      const recent = stats.recentMatches.slice(0, 6);
+      const recent = (stats.recentMatches ?? []).slice(0, 6);
       const missingOpponents = recent
         .map((match) => match.opponentId)
         .filter((id): id is string => !!id && !opponentNames[id]);
@@ -378,7 +378,7 @@ const DashboardPage: React.FC = () => {
             <div>
               <p className="text-xs uppercase tracking-[0.3em] text-emerald-200/80">Player Dashboard</p>
               <h1 className="mt-2 text-4xl font-semibold">
-                Welcome back{fallbackUsername ? `, ${fallbackUsername}` : ''}
+                Welcome {fallbackUsername ? `, ${fallbackUsername}` : ''}
               </h1>
               <p className="mt-2 text-sm text-white/70">
                 Track performance, enter live seasons, and keep momentum between matches.

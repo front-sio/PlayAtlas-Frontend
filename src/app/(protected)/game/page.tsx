@@ -311,7 +311,7 @@ export default function GameLobbyPage() {
                         ) : (
                           <Link href={`/game/match/${m.matchId}`}>
                             <Button className="border-white/20 text-white">
-                              View
+                              Start Play
                             </Button>
                           </Link>
                         )}

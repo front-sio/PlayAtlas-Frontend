@@ -5,13 +5,16 @@ import { normalizeSocketTarget } from '../lib/socket';
 
 interface UseSocketOptions {
   enabled?: boolean;
+  maxReconnectAttempts?: number;
+  reconnectDelay?: number;
 }
 
 export function useSocket(options: UseSocketOptions = {}) {
-  const { enabled = true } = options;
+  const { enabled = true, maxReconnectAttempts = 10, reconnectDelay = 2000 } = options;
   const { data: session, status } = useSession();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [reconnectAttempts, setReconnectAttempts] = useState(0);
 
   useEffect(() => {
     if (!enabled || status !== 'authenticated' || !session) {
@@ -19,7 +22,7 @@ export function useSocket(options: UseSocketOptions = {}) {
     }
 
     const token = (session as any).accessToken;
-    const WS_URL = process.env.NEXT_PUBLIC_ADMIN_WS_URL || 'ws://localhost:8080';
+    const WS_URL = process.env.NEXT_PUBLIC_ADMIN_WS_URL || 'ws://localhost:8081';
     const { url, path } = normalizeSocketTarget(WS_URL);
 
     const socketInstance = io(url, {
@@ -27,20 +30,40 @@ export function useSocket(options: UseSocketOptions = {}) {
       auth: {
         token: token
       },
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'], // Start with polling, then upgrade
       reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionAttempts: 5,
+      reconnectionDelay: reconnectDelay,
+      reconnectionDelayMax: 10000,
+      reconnectionAttempts: maxReconnectAttempts,
+      timeout: 20000,
+      upgrade: true,
+      rememberUpgrade: false,
+      autoConnect: true,
+      forceNew: false
     });
+
+    let reconnectTimeout: NodeJS.Timeout;
 
     socketInstance.on('connect', () => {
       console.log('Socket connected:', socketInstance.id);
       setIsConnected(true);
+      setReconnectAttempts(0);
     });
 
-    socketInstance.on('disconnect', () => {
-      console.log('Socket disconnected');
+    socketInstance.on('disconnect', (reason) => {
+      console.log('Socket disconnected:', reason);
       setIsConnected(false);
+      
+      // Only attempt manual reconnection for specific reasons
+      if (reason === 'io server disconnect' || reason === 'transport close') {
+        if (reconnectAttempts < maxReconnectAttempts) {
+          reconnectTimeout = setTimeout(() => {
+            console.log(`Manual reconnect attempt ${reconnectAttempts + 1}/${maxReconnectAttempts}`);
+            setReconnectAttempts(prev => prev + 1);
+            socketInstance.connect();
+          }, reconnectDelay * (reconnectAttempts + 1));
+        }
+      }
     });
 
     socketInstance.on('connect_error', (error) => {
@@ -52,24 +75,55 @@ export function useSocket(options: UseSocketOptions = {}) {
       console.error('Socket error:', error);
     });
 
+    socketInstance.on('reconnect', (attemptNumber) => {
+      console.log('Socket reconnected after', attemptNumber, 'attempts');
+      setIsConnected(true);
+      setReconnectAttempts(0);
+    });
+
+    socketInstance.on('reconnect_error', (error) => {
+      console.error('Socket reconnect error:', error);
+    });
+
+    socketInstance.on('reconnect_failed', () => {
+      console.error('Socket failed to reconnect after all attempts');
+      setIsConnected(false);
+    });
+
     setSocket(socketInstance);
 
     return () => {
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
       socketInstance.disconnect();
       setSocket(null);
       setIsConnected(false);
+      setReconnectAttempts(0);
     };
-  }, [enabled, status, session]);
+  }, [enabled, status, session, maxReconnectAttempts, reconnectDelay]);
 
   const emit = useCallback((event: string, data: any) => {
     if (socket && isConnected) {
       socket.emit(event, data);
+    } else {
+      console.warn(`Cannot emit ${event}: socket not connected`);
     }
   }, [socket, isConnected]);
+
+  const forceReconnect = useCallback(() => {
+    if (socket) {
+      console.log('Forcing socket reconnection');
+      socket.disconnect();
+      socket.connect();
+    }
+  }, [socket]);
 
   return {
     socket,
     isConnected,
-    emit
+    emit,
+    forceReconnect,
+    reconnectAttempts
   };
 }

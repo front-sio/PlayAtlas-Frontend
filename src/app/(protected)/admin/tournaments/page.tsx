@@ -58,6 +58,14 @@ interface TournamentOverview {
   inProgressMatches: number;
 }
 
+const computeAiDifficulty = (entryFeeValue: string) => {
+  const entryFee = Number(entryFeeValue || 0);
+  if (!entryFee) return '5';
+  const scaled = Math.round((entryFee / 1000) * 5);
+  const clamped = Math.max(1, Math.min(100, scaled));
+  return String(clamped);
+};
+
 export default function AdminTournamentsPage() {
   const { data: session, status } = useSession();
   const token = (session as any)?.accessToken;
@@ -80,7 +88,10 @@ export default function AdminTournamentsPage() {
     maxPlayers: '',
     startTime: '',
     seasonDuration: '',
+    gameType: 'multiplayer',
+    aiDifficulty: '5',
   });
+  const [aiDifficultyTouched, setAiDifficultyTouched] = useState(false);
 
   useEffect(() => {
     if (!canViewTournaments(role)) return;
@@ -179,7 +190,28 @@ export default function AdminTournamentsPage() {
   };
 
   const handleCreateChange = (field: string, value: string) => {
-    setCreateForm((prev) => ({ ...prev, [field]: value }));
+    setCreateForm((prev) => {
+      if (field === 'gameType' && value === 'with_ai') {
+        const aiDifficulty = computeAiDifficulty(prev.entryFee);
+        setAiDifficultyTouched(false);
+        return { ...prev, gameType: value, maxPlayers: '2', aiDifficulty };
+      }
+      if (field === 'gameType' && value !== 'with_ai') {
+        setAiDifficultyTouched(false);
+        return { ...prev, gameType: value };
+      }
+      if (field === 'entryFee') {
+        const next = { ...prev, entryFee: value };
+        if (prev.gameType === 'with_ai' && !aiDifficultyTouched) {
+          next.aiDifficulty = computeAiDifficulty(value);
+        }
+        return next;
+      }
+      if (field === 'aiDifficulty') {
+        setAiDifficultyTouched(true);
+      }
+      return { ...prev, [field]: value };
+    });
   };
 
   const handleCreate = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -194,7 +226,12 @@ export default function AdminTournamentsPage() {
         description: createForm.description,
         entryFee: Number(createForm.entryFee),
         maxPlayers: Number(createForm.maxPlayers),
+        gameType: createForm.gameType
       };
+      if (createForm.gameType === 'with_ai') {
+        payload.maxPlayers = 2;
+        payload.aiDifficulty = Number(createForm.aiDifficulty);
+      }
       if (createForm.startTime) {
         payload.startTime = new Date(createForm.startTime).toISOString();
       }
@@ -211,7 +248,10 @@ export default function AdminTournamentsPage() {
           maxPlayers: '',
           startTime: '',
           seasonDuration: '',
+          gameType: 'multiplayer',
+          aiDifficulty: '5',
         });
+        setAiDifficultyTouched(false);
         await loadData();
       } else {
         setError(result.error || 'Failed to create tournament');
@@ -228,6 +268,7 @@ export default function AdminTournamentsPage() {
   }
 
   const canCreate = canCreateTournaments(role);
+  const isAiTournament = createForm.gameType === 'with_ai';
 
   return (
     <div className="container mx-auto py-10 space-y-6">
@@ -254,12 +295,32 @@ export default function AdminTournamentsPage() {
               className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
               required
             />
+            <select
+              value={createForm.gameType}
+              onChange={(event) => handleCreateChange('gameType', event.target.value)}
+              className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
+            >
+              <option value="multiplayer">Multiplayer</option>
+              <option value="with_ai">With AI</option>
+            </select>
+            {isAiTournament && (
+              <input
+                value={createForm.aiDifficulty}
+                onChange={(event) => handleCreateChange('aiDifficulty', event.target.value)}
+                placeholder="AI difficulty (1-100)"
+                type="number"
+                min="1"
+                max="100"
+                className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
+              />
+            )}
             <input
               value={createForm.maxPlayers}
               onChange={(event) => handleCreateChange('maxPlayers', event.target.value)}
               placeholder="Max players"
               type="number"
               min="2"
+              disabled={isAiTournament}
               className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
               required
             />

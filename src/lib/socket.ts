@@ -11,7 +11,13 @@ export function normalizeSocketTarget(rawUrl: string): SocketTarget {
     return { url: '', path: SOCKET_IO_PATH };
   }
 
-  const withoutTrailing = trimmed.replace(/\/$/, '');
+  let withoutTrailing = trimmed.replace(/\/$/, '');
+  
+  // Convert HTTP/WS protocols to secure versions for production
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
+    withoutTrailing = withoutTrailing.replace(/^http:/, 'https:').replace(/^ws:/, 'wss:');
+  }
+  
   const socketIndex = withoutTrailing.indexOf('/socket.io');
   let url = withoutTrailing;
   let path = SOCKET_IO_PATH;

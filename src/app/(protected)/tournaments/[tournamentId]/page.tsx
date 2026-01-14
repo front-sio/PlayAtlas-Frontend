@@ -78,6 +78,7 @@ export default function TournamentDetailPage() {
   const [joining, setJoining] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [socketConnected, setSocketConnected] = useState(false);
   const socketRef = useRef<Socket | null>(null);
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
@@ -137,7 +138,11 @@ export default function TournamentDetailPage() {
     socketRef.current = s;
 
     s.on('connect', () => {
+      setSocketConnected(true);
       s.emit('join:tournament', String(tournamentId));
+    });
+    s.on('disconnect', () => {
+      setSocketConnected(false);
     });
 
     s.on('season:matches_generated', (payload: any) => {
@@ -161,8 +166,18 @@ export default function TournamentDetailPage() {
     return () => {
       s.disconnect();
       socketRef.current = null;
+      setSocketConnected(false);
     };
   }, [tournamentId, socketTarget, session, token]);
+
+  useEffect(() => {
+    if (!tournamentId) return;
+    if (socketConnected) return;
+    const interval = setInterval(() => {
+      loadTournamentData();
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [tournamentId, socketConnected]);
 
   useEffect(() => {
     const loadWallet = async () => {
@@ -340,7 +355,7 @@ export default function TournamentDetailPage() {
                   const bTime = b.startTime ? new Date(b.startTime).getTime() : 0;
                   return bTime - aTime;
                 })
-                .slice(0, 2)
+                .slice(0, 30)
                 .map((season) => {
                 const disabledReason = getJoinDisabledReason(season);
                 const showJoin = season.status === 'upcoming';
@@ -441,7 +456,7 @@ export default function TournamentDetailPage() {
                     )}
                     {!showJoin && (
                       <p className="mt-4 text-xs text-white/50">
-                        {season.status === 'completed' ? 'Season finished. Results are locked.' : 'Season is not accepting new entries.'}
+                        {season.status === 'completed' ? 'Season finished. Results are locked.' : `${season.name} Season is not accepting new entries.`}
                       </p>
                     )}
                   </div>

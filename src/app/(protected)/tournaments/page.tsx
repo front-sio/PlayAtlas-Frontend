@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import AlertModal from '@/components/ui/AlertModal';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -58,6 +59,12 @@ const TournamentsPage: React.FC = () => {
   const [loadingSeasons, setLoadingSeasons] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState<string | null>(null);
+  const [alertModal, setAlertModal] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    type: 'error' | 'success' | 'info';
+  }>({ open: false, title: '', message: '', type: 'info' });
   const [mounted, setMounted] = useState(false);
   const { data: session } = useSession();
   const socketRef = useRef<Socket | null>(null);
@@ -75,7 +82,7 @@ const TournamentsPage: React.FC = () => {
     const fetchData = async () => {
       try {
         // Fetch tournaments (public)
-        const tournamentsData = await tournamentApi.getTournaments();
+        const tournamentsData = await tournamentApi.getTournaments(1, 50, 'active');
         setTournaments(tournamentsData.data || []);
 
         // Fetch wallet (requires auth)
@@ -247,17 +254,32 @@ const TournamentsPage: React.FC = () => {
 
   const handleJoinSeason = async (tournament: Tournament, season: Season) => {
     if (!session?.user?.userId) {
-      alert('Please login to join tournaments');
+      setAlertModal({
+        open: true,
+        title: 'Login Required',
+        message: 'Please login to join tournaments.',
+        type: 'info'
+      });
       return;
     }
 
     if (!wallet?.walletId) {
-      alert('Wallet information not available');
+      setAlertModal({
+        open: true,
+        title: 'Wallet Unavailable',
+        message: 'Wallet information is not available right now.',
+        type: 'error'
+      });
       return;
     }
 
     if (wallet.balance < tournament.entryFee) {
-      alert('Insufficient balance. Please add funds to your wallet.');
+      setAlertModal({
+        open: true,
+        title: 'Insufficient Balance',
+        message: 'Please add funds to your wallet before joining.',
+        type: 'error'
+      });
       return;
     }
 
@@ -279,13 +301,28 @@ const TournamentsPage: React.FC = () => {
         // Update wallet balance
         setWallet(prev => prev ? { ...prev, balance: prev.balance - tournament.entryFee } : null);
 
-        alert(`Successfully joined ${season.name || `Season ${season.seasonNumber}`} for: ${tournament.name}`);
+        setAlertModal({
+          open: true,
+          title: 'Joined Successfully',
+          message: `You joined ${season.name || `Season ${season.seasonNumber}`} for ${tournament.name}.`,
+          type: 'success'
+        });
       } else {
-        alert('Please login to join tournaments');
+        setAlertModal({
+          open: true,
+          title: 'Login Required',
+          message: 'Please login to join tournaments.',
+          type: 'info'
+        });
       }
     } catch (error: any) {
       console.error('Failed to join tournament:', error);
-      alert(error.message || 'Failed to join tournament. Please try again.');
+      setAlertModal({
+        open: true,
+        title: 'Join Failed',
+        message: error.message || 'Failed to join tournament. Please try again.',
+        type: 'error'
+      });
     } finally {
       setJoining(null);
     }
@@ -299,6 +336,13 @@ const TournamentsPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(20,184,166,0.15),_transparent_55%),radial-gradient(circle_at_30%_40%,_rgba(234,179,8,0.12),_transparent_55%),linear-gradient(180deg,_#0b0f1a_0%,_#070a12_45%,_#06080e_100%)] text-white">
+      <AlertModal
+        open={alertModal.open}
+        onOpenChange={(open) => setAlertModal((prev) => ({ ...prev, open }))}
+        title={alertModal.title}
+        message={alertModal.message}
+        type={alertModal.type}
+      />
       <div className="mx-auto max-w-6xl px-4 py-10 space-y-8" style={{ fontFamily: 'var(--font-tournament)' }}>
         <section className="rounded-3xl border border-white/10 bg-white/5 p-6 sm:p-8 backdrop-blur">
           <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
