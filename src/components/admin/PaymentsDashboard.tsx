@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AccessDenied } from '@/components/admin/AccessDenied';
+import { ResponsiveTable, Column } from '@/components/admin/ResponsiveTable';
 import { AlertCircle, CheckCircle, Clock, Filter, Search, XCircle } from 'lucide-react';
 
 type PaymentStatus = string;
@@ -189,6 +190,12 @@ export function PaymentsDashboard({ title, subtitle }: { title: string; subtitle
   const [error, setError] = useState('');
   const [selectedTxs, setSelectedTxs] = useState<Set<string>>(new Set());
   const [bulkProcessing, setBulkProcessing] = useState(false);
+  
+  // TID Search functionality
+  const [tidSearch, setTidSearch] = useState('');
+  const [tidSearchResults, setTidSearchResults] = useState<any[]>([]);
+  const [tidSearchLoading, setTidSearchLoading] = useState(false);
+  const [showTidSearch, setShowTidSearch] = useState(false);
 
   const canView = isFinanceOfficer(role);
 
@@ -238,6 +245,101 @@ export function PaymentsDashboard({ title, subtitle }: { title: string; subtitle
     
     setTransactions(Array.isArray(items) ? items : []);
     setLoading(false);
+  };
+
+  // TID search functions
+  const searchByTid = async (tid: string) => {
+    if (!token || !tid.trim()) return;
+    
+    setTidSearchLoading(true);
+    setTidSearchResults([]);
+    
+    try {
+      const result = await paymentApi.searchByTid(token, tid.trim());
+      
+      if (result?.success && result?.data) {
+        setTidSearchResults(result.data);
+      } else {
+        setTidSearchResults([]);
+        notificationService.showNotification({
+          type: 'info',
+          message: `No SMS messages found for TID: ${tid}`
+        });
+      }
+    } catch (error) {
+      console.error('TID search error:', error);
+      notificationService.showNotification({
+        type: 'error',
+        message: 'Failed to search for TID'
+      });
+    } finally {
+      setTidSearchLoading(false);
+    }
+  };
+
+  const handleAttachToDeposit = async (messageId: string, depositId: string) => {
+    if (!token) return;
+    
+    try {
+      const result = await paymentApi.attachMessageToDeposit(token, depositId, { messageId });
+      
+      if (result?.success) {
+        notificationService.showNotification({
+          type: 'success',
+          message: 'SMS message attached to deposit successfully'
+        });
+        
+        // Refresh the search results and transactions
+        if (tidSearch) {
+          await searchByTid(tidSearch);
+        }
+        await fetchTransactions(tab === 'all' ? undefined : tab);
+      }
+    } catch (error) {
+      console.error('Attach message error:', error);
+      notificationService.showNotification({
+        type: 'error',
+        message: 'Failed to attach SMS message to deposit'
+      });
+    }
+  };
+
+  const handleApproveWithTid = async (depositId: string, tid?: string, transactionMessage?: string) => {
+    if (!token) return;
+    
+    try {
+      setProcessing(depositId);
+      
+      const result = await paymentApi.approveDepositWithTid(token, depositId, {
+        tid,
+        transactionMessage
+      });
+      
+      if (result?.success) {
+        notificationService.showNotification({
+          type: 'success',
+          message: 'Deposit approved with TID validation'
+        });
+        
+        // Refresh everything
+        await fetchTransactions(tab === 'all' ? undefined : tab);
+        await fetchStats();
+        if (tidSearch) {
+          await searchByTid(tidSearch);
+        }
+        
+        setDetailsOpen(false);
+        setSelectedTx(null);
+      }
+    } catch (error) {
+      console.error('Approve with TID error:', error);
+      notificationService.showNotification({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to approve deposit'
+      });
+    } finally {
+      setProcessing(null);
+    }
   };
 
   useEffect(() => {
@@ -482,7 +584,7 @@ export function PaymentsDashboard({ title, subtitle }: { title: string; subtitle
         {subtitle && <p className="text-sm text-slate-500">{subtitle}</p>}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-slate-500">Today Deposits</CardTitle>
@@ -532,29 +634,39 @@ export function PaymentsDashboard({ title, subtitle }: { title: string; subtitle
             <CardTitle>Transactions</CardTitle>
             <p className="text-xs text-slate-500">Manage deposits and cashouts in one view.</p>
           </div>
-          <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center">
-            <div className="relative w-full md:w-64">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-              <Input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search by user, ref, phone"
-                className="pl-9"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-slate-400" />
-              <select
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value)}
-                className="rounded border border-input bg-background px-3 py-2 text-sm"
-              >
-                {['all', 'pending_approval', 'pending', 'pending_payment', 'completed', 'approved', 'failed', 'rejected', 'cancelled'].map((status) => (
-                  <option key={status} value={status}>
-                    {statusLabel(status)}
-                  </option>
-                ))}
-              </select>
+          <div className="flex w-full flex-col gap-3 sm:gap-2 md:w-auto md:flex-row md:items-center">
+            <Button
+              variant="outline"
+              onClick={() => setShowTidSearch(!showTidSearch)}
+              className="w-full sm:w-auto"
+            >
+              <Search className="w-4 h-4 mr-2" />
+              {showTidSearch ? 'Hide TID Search' : 'Search by TID'}
+            </Button>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="relative flex-1 sm:w-48 md:w-64">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                <Input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search by user, ref, phone"
+                  className="pl-9"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                <select
+                  value={statusFilter}
+                  onChange={(event) => setStatusFilter(event.target.value)}
+                  className="flex-1 sm:flex-none rounded border border-input bg-background px-3 py-2 text-sm min-w-0"
+                >
+                  {['all', 'pending_approval', 'pending', 'pending_payment', 'completed', 'approved', 'failed', 'rejected', 'cancelled'].map((status) => (
+                    <option key={status} value={status}>
+                      {statusLabel(status)}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -565,103 +677,266 @@ export function PaymentsDashboard({ title, subtitle }: { title: string; subtitle
             </div>
           )}
 
+          {/* TID Search Panel */}
+          {showTidSearch && (
+            <Card className="mb-6 border-l-4 border-l-blue-500">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg text-blue-700">Search by Transaction ID (TID)</CardTitle>
+                <p className="text-sm text-slate-600">
+                  Search for SMS transaction messages using TID (e.g., MP260119.1639.R71104)
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex gap-2">
+                  <Input
+                    value={tidSearch}
+                    onChange={(e) => setTidSearch(e.target.value.toUpperCase())}
+                    placeholder="Enter TID (e.g., MP260119.1639.R71104)"
+                    className="flex-1"
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        searchByTid(tidSearch);
+                      }
+                    }}
+                  />
+                  <Button 
+                    onClick={() => searchByTid(tidSearch)}
+                    disabled={tidSearchLoading || !tidSearch.trim()}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    {tidSearchLoading ? 'Searching...' : 'Search'}
+                  </Button>
+                </div>
+
+                {/* TID Search Results */}
+                {tidSearchResults.length > 0 && (
+                  <div className="space-y-3">
+                    <h4 className="font-medium text-slate-900">Search Results</h4>
+                    {tidSearchResults.map((message, index) => (
+                      <div key={message.messageId || index} className="border rounded-lg p-4 bg-slate-50">
+                        <div className="grid gap-3">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <div className="font-medium text-slate-900">
+                                TID: {message.tid}
+                              </div>
+                              <div className="text-sm text-slate-600">
+                                Provider: {message.provider} | Status: {message.status}
+                              </div>
+                            </div>
+                            <Badge variant={
+                              message.status === 'APPROVED' ? 'success' :
+                              message.status === 'LINKED' ? 'warning' :
+                              message.status === 'DUPLICATE' ? 'destructive' : 'secondary'
+                            }>
+                              {message.status}
+                            </Badge>
+                          </div>
+                          
+                          {message.amount && (
+                            <div className="text-sm">
+                              <span className="font-medium">Amount: TSH {parseFloat(message.amount).toLocaleString()}</span>
+                              {message.fee && <span className="text-slate-500"> (Fee: TSH {parseFloat(message.fee).toLocaleString()})</span>}
+                            </div>
+                          )}
+                          
+                          <div className="text-xs text-slate-600 bg-white p-2 rounded border">
+                            <strong>SMS Text:</strong>
+                            <div className="mt-1 whitespace-pre-wrap">{message.rawText}</div>
+                          </div>
+                          
+                          {message.linkedDeposit && (
+                            <div className="bg-green-50 border border-green-200 p-2 rounded text-sm">
+                              <strong className="text-green-800">Linked to Deposit:</strong>
+                              <div className="text-green-700">
+                                ID: {message.linkedDeposit.depositId} | 
+                                Amount: TSH {parseFloat(message.linkedDeposit.amount).toLocaleString()} | 
+                                Status: {message.linkedDeposit.status}
+                              </div>
+                              {message.linkedDeposit.status === 'pending' && (
+                                <Button
+                                  size="sm"
+                                  className="mt-2"
+                                  onClick={() => handleApproveWithTid(
+                                    message.linkedDeposit.depositId, 
+                                    message.tid,
+                                    'Deposit approved via TID search'
+                                  )}
+                                  disabled={processing === message.linkedDeposit.depositId}
+                                >
+                                  {processing === message.linkedDeposit.depositId ? 'Approving...' : 'Approve Deposit'}
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                          
+                          {!message.linkedDeposit && message.status === 'NEW' && (
+                            <div className="bg-yellow-50 border border-yellow-200 p-2 rounded text-sm">
+                              <div className="text-yellow-800">This SMS is not linked to any deposit request.</div>
+                              <div className="text-yellow-700 mt-1">
+                                To link it, find the corresponding deposit in the transactions below and use "Attach Message".
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {tidSearchLoading && (
+                  <div className="text-center py-4">
+                    <div className="inline-flex items-center gap-2 text-slate-600">
+                      <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                      Searching for TID...
+                    </div>
+                  </div>
+                )}
+
+                {!tidSearchLoading && tidSearch && tidSearchResults.length === 0 && (
+                  <div className="text-center py-4 text-slate-500">
+                    No SMS messages found for TID: {tidSearch}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           <Tabs value={tab} onValueChange={(value) => setTab(value as any)}>
-            <TabsList className="mb-4">
-              <TabsTrigger value="all">All Transactions</TabsTrigger>
-              <TabsTrigger value="deposit">Deposits</TabsTrigger>
-              <TabsTrigger value="withdrawal">Cashouts</TabsTrigger>
-              <TabsTrigger value="other">Other (Prizes, Fees, etc.)</TabsTrigger>
+            <TabsList className="mb-4 w-full justify-start gap-2 overflow-x-auto rounded-lg border border-slate-200 bg-white px-2 py-1 shadow-sm snap-x snap-mandatory no-scrollbar">
+              <TabsTrigger value="all" className="min-w-[120px] flex-shrink-0 snap-start text-xs sm:text-sm">All Transactions</TabsTrigger>
+              <TabsTrigger value="deposit" className="min-w-[120px] flex-shrink-0 snap-start text-xs sm:text-sm">Deposits</TabsTrigger>
+              <TabsTrigger value="withdrawal" className="min-w-[120px] flex-shrink-0 snap-start text-xs sm:text-sm">Cashouts</TabsTrigger>
+              <TabsTrigger value="other" className="min-w-[180px] flex-shrink-0 snap-start whitespace-nowrap text-xs sm:text-sm">Other (Prizes, Fees, etc.)</TabsTrigger>
             </TabsList>
 
             <TabsContent value={tab}>
               {loading ? (
                 <p className="text-sm text-slate-500">Loading transactions...</p>
-              ) : filtered.length === 0 ? (
-                <p className="text-sm text-slate-500">No transactions found.</p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead className="border-b text-left text-xs uppercase text-slate-500">
-                      <tr>
-                        <th className="px-3 py-2">Type</th>
-                        <th className="px-3 py-2">Reference</th>
-                        <th className="px-3 py-2">Description</th>
-                        <th className="px-3 py-2">User</th>
-                        <th className="px-3 py-2">Amount</th>
-                        <th className="px-3 py-2">Fee</th>
-                        <th className="px-3 py-2">Status</th>
-                        <th className="px-3 py-2">Created</th>
-                        <th className="px-3 py-2">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filtered.map((tx) => (
-                        <tr key={`${tx.type}:${tx.id}`} className="border-b last:border-0">
-                          <td className="px-3 py-3">
-                            <Badge className={
-                              tx.type === 'deposit' ? 'bg-emerald-100 text-emerald-700' : 
-                              tx.type === 'withdrawal' ? 'bg-indigo-100 text-indigo-700' :
-                              tx.type === 'prize' ? 'bg-yellow-100 text-yellow-700' :
-                              tx.type === 'entry_fee' ? 'bg-purple-100 text-purple-700' :
-                              tx.type === 'transaction_fee' ? 'bg-gray-100 text-gray-700' :
-                              tx.type === 'bonus' ? 'bg-green-100 text-green-700' :
-                              tx.type === 'refund' ? 'bg-blue-100 text-blue-700' :
-                              'bg-slate-100 text-slate-700'
-                            }>
-                              {tx.type === 'withdrawal' ? 'Cashout' : 
-                               tx.type === 'deposit' ? 'Deposit' :
-                               tx.type === 'entry_fee' ? 'Entry Fee' :
-                               tx.type === 'transaction_fee' ? 'Transaction Fee' :
-                               tx.type?.charAt(0).toUpperCase() + tx.type?.slice(1).replace('_', ' ') || 'Unknown'}
-                            </Badge>
-                          </td>
-                          <td className="px-3 py-3">{tx.referenceNumber || '—'}</td>
-                          <td className="px-3 py-3 text-xs text-slate-600 max-w-xs truncate">
-                            {tx.description || 
+                <ResponsiveTable
+                  data={filtered}
+                  keyExtractor={(tx) => `${tx.type}:${tx.id}`}
+                  onRowClick={(tx) => {
+                    setSelectedTx(tx);
+                    setDetailsOpen(true);
+                  }}
+                  emptyMessage="No transactions found."
+                  columns={[
+                    {
+                      key: 'type',
+                      label: 'Type',
+                      mobilePriority: 'high',
+                      render: (type) => (
+                        <Badge className={
+                          type === 'deposit' ? 'bg-emerald-100 text-emerald-700' : 
+                          type === 'withdrawal' ? 'bg-indigo-100 text-indigo-700' :
+                          type === 'prize' ? 'bg-yellow-100 text-yellow-700' :
+                          type === 'entry_fee' ? 'bg-purple-100 text-purple-700' :
+                          type === 'transaction_fee' ? 'bg-gray-100 text-gray-700' :
+                          type === 'bonus' ? 'bg-green-100 text-green-700' :
+                          type === 'refund' ? 'bg-blue-100 text-blue-700' :
+                          'bg-slate-100 text-slate-700'
+                        }>
+                          {type === 'withdrawal' ? 'Cashout' : 
+                           type === 'deposit' ? 'Deposit' :
+                           type === 'entry_fee' ? 'Entry Fee' :
+                           type === 'transaction_fee' ? 'Transaction Fee' :
+                           type?.charAt(0).toUpperCase() + type?.slice(1).replace('_', ' ') || 'Unknown'}
+                        </Badge>
+                      )
+                    },
+                    {
+                      key: 'referenceNumber',
+                      label: 'Reference',
+                      mobilePriority: 'medium',
+                      render: (ref) => ref || '—'
+                    },
+                    {
+                      key: 'description',
+                      label: 'Description',
+                      mobilePriority: 'low',
+                      className: 'text-xs text-slate-600',
+                      render: (description, tx) => (
+                        <div className="max-w-xs">
+                          <div className="truncate">
+                            {description || 
                              (tx.type === 'prize' ? 'Tournament/Game Prize' : 
                               tx.type === 'entry_fee' ? 'Tournament Entry Fee' :
                               tx.type === 'transaction_fee' ? 'System Transaction Fee' :
                               tx.type === 'bonus' ? 'User Bonus' :
                               tx.type === 'refund' ? 'Payment Refund' : 
                               tx.provider || '—')}
-                            {/* Debug: Show message status */}
-                            <br />
-                            <span className="text-blue-600">
-                              MSG: {tx.transactionMessage ? '✓' : '✗'} 
-                              {(tx as any).message ? ' | ALT: ✓' : ''}
-                              {(tx as any).confirmationMessage ? ' | CONF: ✓' : ''}
-                            </span>
-                          </td>
-                          <td className="px-3 py-3">{tx.userId || '—'}</td>
-                          <td className="px-3 py-3">TSH {Number(tx.amount || 0).toLocaleString()}</td>
-                          <td className="px-3 py-3">TSH {Number(tx.fee || 0).toLocaleString()}</td>
-                          <td className="px-3 py-3">{statusBadge(tx.status)}</td>
-                          <td className="px-3 py-3">
-                            {tx.createdAt ? new Date(tx.createdAt).toLocaleString() : '—'}
-                          </td>
-                          <td className="px-3 py-3">
-                            <Button
-                              size="sm"
-                              onClick={() => {
-                                setSelectedTx(tx);
-                                setDetailsOpen(true);
-                              }}
-                            >
-                              View
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                          </div>
+                          {/* Show message status for mobile debugging */}
+                          <div className="text-xs text-blue-600 md:hidden">
+                            MSG: {tx.transactionMessage ? '✓' : '✗'} 
+                            {(tx as any).message ? ' | ALT: ✓' : ''}
+                            {(tx as any).confirmationMessage ? ' | CONF: ✓' : ''}
+                          </div>
+                        </div>
+                      )
+                    },
+                    {
+                      key: 'userId',
+                      label: 'User',
+                      mobilePriority: 'low',
+                      render: (userId) => userId || '—'
+                    },
+                    {
+                      key: 'amount',
+                      label: 'Amount',
+                      mobilePriority: 'high',
+                      className: 'font-semibold text-slate-900',
+                      render: (amount) => `TSH ${Number(amount || 0).toLocaleString()}`
+                    },
+                    {
+                      key: 'fee',
+                      label: 'Fee',
+                      mobilePriority: 'medium',
+                      className: 'text-sm text-slate-600',
+                      render: (fee) => `TSH ${Number(fee || 0).toLocaleString()}`
+                    },
+                    {
+                      key: 'status',
+                      label: 'Status',
+                      mobilePriority: 'high',
+                      render: (status) => statusBadge(status)
+                    },
+                    {
+                      key: 'createdAt',
+                      label: 'Created',
+                      mobilePriority: 'medium',
+                      className: 'text-sm text-slate-600',
+                      render: (createdAt) => createdAt ? new Date(createdAt).toLocaleDateString() : '—'
+                    },
+                    {
+                      key: 'id',
+                      label: 'Action',
+                      mobilePriority: 'high',
+                      render: (id, tx) => (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedTx(tx);
+                            setDetailsOpen(true);
+                          }}
+                        >
+                          View
+                        </Button>
+                      )
+                    }
+                  ] as Column<PaymentTransaction>[]}
+                />
               )}
             </TabsContent>
           </Tabs>
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-slate-500">Completed Deposits</CardTitle>
@@ -708,7 +983,7 @@ export function PaymentsDashboard({ title, subtitle }: { title: string; subtitle
 
       {/* Transaction Details Dialog */}
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto mx-4">
           <DialogHeader>
             <DialogTitle>Transaction Details</DialogTitle>
             <DialogDescription>Review the full transaction information before approval.</DialogDescription>

@@ -44,14 +44,20 @@ class MatchmakingSocketService {
       return;
     }
 
-    const matchmakingServiceUrl = process.env.NEXT_PUBLIC_MATCHMAKING_SERVICE_URL || 'http://localhost:3009';
+    const fallbackBase = process.env.NODE_ENV === 'development' ? 'http://localhost:3009' : '';
+    const rawBase = process.env.NEXT_PUBLIC_MATCHMAKING_SERVICE_URL
+      || process.env.NEXT_PUBLIC_ADMIN_WS_URL
+      || process.env.NEXT_PUBLIC_API_URL
+      || fallbackBase;
+    const matchmakingServiceUrl = rawBase.replace(/\/api\/?$/, '');
     const socketPathOverride = process.env.NEXT_PUBLIC_MATCHMAKING_SOCKET_PATH;
     const socketTarget = socketPathOverride
       ? `${matchmakingServiceUrl.replace(/\/$/, '')}${socketPathOverride}`
       : matchmakingServiceUrl;
     const { url, path } = normalizeSocketTarget(socketTarget);
+    const connectionUrl = url || undefined;
 
-    this.socket = io(url, {
+    this.socket = io(connectionUrl, {
       path,
       transports: ['polling', 'websocket'],
       reconnection: true,

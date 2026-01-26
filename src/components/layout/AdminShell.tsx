@@ -7,6 +7,7 @@ import { useMemo, useState, useEffect } from "react";
 import {
   BarChart3,
   Banknote,
+  Building2,
   ClipboardList,
   Gamepad2,
   Home,
@@ -31,6 +32,7 @@ const NAV_ITEMS = [
   { href: "/admin/cashouts", label: "Cashouts", icon: ClipboardList, description: "Manage cashout requests" },
   { href: "/admin/wallets", label: "Wallets", icon: Wallet, description: "View and manage wallets" },
   { href: "/admin/users", label: "Users", icon: Users, description: "User and agent management" },
+  { href: "/admin/clubs", label: "Clubs", icon: Building2, description: "Club management" },
   { href: "/admin/games", label: "Games", icon: Gamepad2, description: "Game session management" },
   { href: "/admin/tournaments", label: "Tournaments", icon: Trophy, description: "Tournament management" },
   { href: "/admin/revenue", label: "Revenue", icon: BarChart3, description: "Revenue and analytics" }
@@ -218,8 +220,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <div className="hidden fixed top-0 left-0 h-screen w-64 lg:block z-40">{Sidebar}</div>
 
         <div className="flex min-h-screen flex-1 flex-col lg:ml-64">
-          <header className="sticky top-0 z-40 flex items-center justify-between border-b border-slate-200 bg-white/90 px-6 py-4 backdrop-blur shadow-sm">
-            <div className="flex items-center space-x-4">
+          <header className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-white/90 px-4 py-4 backdrop-blur shadow-sm sm:px-6">
+            <div className="flex min-w-0 items-center space-x-4">
               <Button
                 variant="ghost"
                 size="icon"
@@ -231,7 +233,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               <div>
                 <div className="flex items-center space-x-2">
                   <currentPage.icon className="w-5 h-5 text-slate-600" />
-                  <h1 className="text-xl font-semibold text-slate-900">{currentPage.label}</h1>
+                  <h1 className="text-lg font-semibold text-slate-900 sm:text-xl">{currentPage.label}</h1>
                 </div>
                 <p className="text-sm text-slate-600">{currentPage.description}</p>
               </div>
@@ -248,7 +250,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             </div>
           </header>
 
-          <main className="flex-1 px-6 py-6">
+          <main className="flex-1 px-4 py-6 sm:px-6">
             {children}
           </main>
         </div>

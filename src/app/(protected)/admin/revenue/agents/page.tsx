@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AccessDenied } from '@/components/admin/AccessDenied';
 import { canViewFinancialReports } from '@/lib/permissions';
+import { getApiBaseUrl } from '@/lib/apiBase';
 import {
   Users,
   TrendingUp,
@@ -50,6 +51,7 @@ export default function AgentRevenuePage() {
   const { data: session, status } = useSession();
   const role = (session?.user as any)?.role;
   const token = (session as any)?.accessToken;
+  const apiBase = getApiBaseUrl();
   
   const [revenueData, setRevenueData] = useState<AgentRevenueData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -57,7 +59,7 @@ export default function AgentRevenuePage() {
   
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedAgent, setSelectedAgent] = useState('');
+  const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token || (role && !canViewFinancialReports(role))) return;
@@ -72,14 +74,10 @@ export default function AgentRevenuePage() {
         const start = new Date();
         start.setMonth(start.getMonth() - 1);
 
-        const url = new URL(`${process.env.NEXT_PUBLIC_API_URL}/revenue/agent`);
+        const url = new URL(`${apiBase}/revenue/agent`);
         url.searchParams.append('startDate', start.toISOString());
         url.searchParams.append('endDate', end.toISOString());
         
-        if (selectedAgent) {
-          url.searchParams.append('agentId', selectedAgent);
-        }
-
         const response = await fetch(url.toString(), {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -104,7 +102,7 @@ export default function AgentRevenuePage() {
     };
 
     loadAgentRevenue();
-  }, [token, role, selectedAgent]);
+  }, [token, role]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-TZ', {
@@ -118,6 +116,16 @@ export default function AgentRevenuePage() {
   const filteredAgents = revenueData?.topAgents.filter(agent =>
     !searchTerm || agent.agentName?.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
+
+  const activeAgent = activeAgentId
+    ? revenueData?.topAgents.find((agent) => agent.agentId === activeAgentId) || null
+    : null;
+
+  const activeAgentHistory = activeAgentId
+    ? (revenueData?.data || [])
+        .filter((row) => row.agentId === activeAgentId)
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    : [];
 
   const handleExport = () => {
     if (!revenueData) return;
@@ -285,6 +293,7 @@ export default function AgentRevenuePage() {
                       <th className="text-right py-3 px-4 text-sm font-medium text-slate-500">Total Revenue</th>
                       <th className="text-right py-3 px-4 text-sm font-medium text-slate-500">Commission</th>
                       <th className="text-right py-3 px-4 text-sm font-medium text-slate-500">Commission %</th>
+                      <th className="text-right py-3 px-4 text-sm font-medium text-slate-500">Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -320,6 +329,14 @@ export default function AgentRevenuePage() {
                           <td className="py-3 px-4 text-sm text-right text-slate-900">
                             {((agent.totalCommission / agent.totalRevenue) * 100 || 0).toFixed(1)}%
                           </td>
+                          <td className="py-3 px-4 text-sm text-right">
+                            <button
+                              onClick={() => setActiveAgentId(agent.agentId)}
+                              className="text-sm font-medium text-slate-700 hover:text-slate-900"
+                            >
+                              View
+                            </button>
+                          </td>
                         </tr>
                       ))
                     )}
@@ -328,6 +345,80 @@ export default function AgentRevenuePage() {
               </div>
             </CardContent>
           </Card>
+
+          {activeAgent && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-slate-900">
+                  {activeAgent.agentName || 'Agent'} Progression
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div>
+                    <p className="text-xs text-slate-500">Monthly Revenue</p>
+                    <p className="text-lg font-semibold text-slate-900">
+                      {formatCurrency(activeAgent.totalRevenue)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Players Registered</p>
+                    <p className="text-lg font-semibold text-slate-900">
+                      {activeAgent.playerCount}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Commission Earned</p>
+                    <p className="text-lg font-semibold text-slate-900">
+                      {formatCurrency(activeAgent.totalCommission)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-6">
+                  <p className="text-sm font-medium text-slate-700">Daily Progression</p>
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-slate-200">
+                          <th className="text-left py-2 px-3 text-xs font-medium text-slate-500">Date</th>
+                          <th className="text-right py-2 px-3 text-xs font-medium text-slate-500">Revenue</th>
+                          <th className="text-right py-2 px-3 text-xs font-medium text-slate-500">Commission</th>
+                          <th className="text-right py-2 px-3 text-xs font-medium text-slate-500">Players</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {activeAgentHistory.length === 0 ? (
+                          <tr>
+                            <td colSpan={4} className="py-4 text-center text-sm text-slate-500">
+                              No progression data available
+                            </td>
+                          </tr>
+                        ) : (
+                          activeAgentHistory.map((row) => (
+                            <tr key={row.id} className="border-b border-slate-100">
+                              <td className="py-2 px-3 text-sm text-slate-700">
+                                {new Date(row.date).toLocaleDateString('en-TZ', { month: 'short', day: 'numeric' })}
+                              </td>
+                              <td className="py-2 px-3 text-sm text-right text-slate-900">
+                                {formatCurrency(row.playerRevenue)}
+                              </td>
+                              <td className="py-2 px-3 text-sm text-right text-slate-900">
+                                {formatCurrency(row.commissionEarned)}
+                              </td>
+                              <td className="py-2 px-3 text-sm text-right text-slate-900">
+                                {row.playersRegistered}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
     </div>

@@ -76,7 +76,10 @@ const DashboardPage: React.FC = () => {
   const profileEnsuredRef = useRef(false);
 
   const playerId = session?.user?.userId;
+  const clubIdFromSession = (session?.user as any)?.clubId as string | undefined;
   const accessToken = session?.accessToken;
+  const userRole = (session?.user as any)?.role;
+  const isAgent = String(userRole || '').toLowerCase() === 'agent';
   const fallbackUsername =
     session?.user?.username ||
     session?.user?.email?.split('@')[0] ||
@@ -131,7 +134,7 @@ const DashboardPage: React.FC = () => {
   }, [status, router]);
 
   useEffect(() => {
-    if (!playerId) return;
+    if (!playerId || isAgent) return;
     let cancelled = false;
 
     const loadStats = async () => {
@@ -179,7 +182,7 @@ const DashboardPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [playerId, accessToken]);
+  }, [playerId, accessToken, isAgent]);
 
   useEffect(() => {
     if (!playerId) return;
@@ -189,7 +192,15 @@ const DashboardPage: React.FC = () => {
       setTournamentsLoading(true);
       setTournamentsError(null);
       try {
-        const response = await tournamentApi.getTournaments(1, 50, 'active');
+        const clubId = clubIdFromSession || ((stats as any)?.clubId as string | undefined);
+        if (!clubId) {
+          if (!cancelled) {
+            setTournaments([]);
+            setTournamentsLoading(false);
+          }
+          return;
+        }
+        const response = await tournamentApi.getTournaments(1, 50, 'active', clubId);
         if (cancelled) return;
         setTournaments(response?.data || []);
       } catch (err) {
@@ -204,7 +215,7 @@ const DashboardPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [playerId]);
+  }, [playerId, stats?.clubId, clubIdFromSession]);
 
   useEffect(() => {
     if (!stats?.recentMatches?.length) return;
@@ -254,7 +265,7 @@ const DashboardPage: React.FC = () => {
   }, [stats?.recentMatches, opponentNames, tournamentNames, accessToken]);
 
   useEffect(() => {
-    if (!socket || !isConnected || !playerId) return;
+    if (!socket || !isConnected || !playerId || isAgent) return;
 
     const handleStats = (payload: PlayerStats) => {
       setStats(payload || null);
@@ -297,7 +308,7 @@ const DashboardPage: React.FC = () => {
       socket.off('player:stats', handleStats);
       socket.off('player:stats:error', handleStatsError);
     };
-  }, [socket, isConnected, playerId]);
+  }, [socket, isConnected, playerId, isAgent]);
 
   useEffect(() => {
     if (!socket || !isConnected || !playerId) return;
@@ -389,7 +400,7 @@ const DashboardPage: React.FC = () => {
                 onClick={() => router.push('/game')}
                 className="bg-emerald-500 hover:bg-emerald-600 text-white"
               >
-                Start Match
+                View Matches
               </Button>
               <Button
                 onClick={() => router.push('/tournaments')}
@@ -703,7 +714,7 @@ const DashboardPage: React.FC = () => {
                 onClick={() => router.push('/game')}
                 className="bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600"
               >
-                Start a Match
+                View Matches
               </Button>
               <Button
                 onClick={() => router.push('/tournaments')}

@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AccessDenied } from '@/components/admin/AccessDenied';
 import { canViewFinancialReports } from '@/lib/permissions';
 import { adminApi } from '@/lib/apiService';
+import { getApiBaseUrl } from '@/lib/apiBase';
 import {
   TrendingUp,
   TrendingDown,
@@ -16,7 +17,8 @@ import {
   Calendar,
   ArrowUpRight,
   ArrowDownRight,
-  Loader2
+  Loader2,
+  Wallet
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -51,6 +53,12 @@ interface DashboardStats {
     lifetimeValue: number;
     netProfit: number;
   }>;
+  realtime?: {
+    platformWalletBalance: number;
+    systemWalletBalance: number;
+    aiWalletBalance: number;
+    agentRevenue: number;
+  };
   timestamp: string;
 }
 
@@ -58,6 +66,7 @@ export default function RevenueDashboardPage() {
   const { data: session, status } = useSession();
   const role = (session?.user as any)?.role;
   const token = (session as any)?.accessToken;
+  const apiBase = getApiBaseUrl();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -71,7 +80,7 @@ export default function RevenueDashboardPage() {
       setError('');
 
       try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/revenue/dashboard`, {
+        const response = await fetch(`${apiBase}/revenue/dashboard`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -172,6 +181,70 @@ export default function RevenueDashboardPage() {
           View Reports
         </Link>
       </div>
+
+      {stats.realtime && (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium text-slate-500">Platform Revenue</CardTitle>
+                <Wallet className="h-4 w-4 text-slate-400" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-slate-900">
+                {formatCurrency(stats.realtime.platformWalletBalance)}
+              </div>
+              <p className="mt-2 text-xs text-slate-500">Fees + platform earnings</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium text-slate-500">System Wallet</CardTitle>
+                <Wallet className="h-4 w-4 text-slate-400" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-slate-900">
+                {formatCurrency(stats.realtime.systemWalletBalance)}
+              </div>
+              <p className="mt-2 text-xs text-slate-500">Tournament entry funds</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium text-slate-500">Agent Revenue</CardTitle>
+                <Users className="h-4 w-4 text-slate-400" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-slate-900">
+                {formatCurrency(stats.realtime.agentRevenue)}
+              </div>
+              <p className="mt-2 text-xs text-slate-500">Agent wallet totals</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium text-slate-500">AI Wallet</CardTitle>
+                <TrendingUp className="h-4 w-4 text-slate-400" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-slate-900">
+                {formatCurrency(stats.realtime.aiWalletBalance)}
+              </div>
+              <p className="mt-2 text-xs text-slate-500">AI winnings balance</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Quick Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

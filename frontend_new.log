@@ -1,0 +1,79 @@
+
+> playatlas-frontend@1.0.0 dev
+> next dev -p 3000 2>&1 | tee dev.log
+
+ ⚠ You are using a non-standard "NODE_ENV" value in your environment. This creates inconsistencies in the project and is strongly advised against. Read more: https://nextjs.org/docs/messages/non-standard-node-env
+   ▲ Next.js 15.5.9
+   - Local:        http://localhost:3000
+   - Network:       http://localhost:3000
+   - Environments: .env.local
+
+ ✓ Starting...
+   Reload env: .env.production
+ ✓ Ready in 2.5s
+ ○ Compiling /dashboard ...
+ ✓ Compiled /dashboard in 2.8s (1160 modules)
+ GET /dashboard 200 in 4069ms
+[next-auth][warn][DEBUG_ENABLED] 
+https://next-auth.js.org/warnings#debug_enabled
+ GET /api/auth/session 200 in 4204ms
+ GET /api/auth/session 200 in 60ms
+ GET /api/auth/session 200 in 20ms
+ ○ Compiling /tournaments/[tournamentId] ...
+ ✓ Compiled /tournaments/[tournamentId] in 703ms (1167 modules)
+ GET /tournaments/0150d666-7706-47b1-9d59-4468375f1bcf 200 in 1319ms
+[next-auth][warn][DEBUG_ENABLED] 
+https://next-auth.js.org/warnings#debug_enabled
+ GET /api/auth/session 200 in 59ms
+ GET /api/auth/session 200 in 27ms
+ GET /api/auth/session 200 in 32ms
+ ○ Compiling /tournaments ...
+ ✓ Compiled /tournaments in 990ms (1282 modules)
+ GET /tournaments 200 in 1336ms
+[next-auth][warn][DEBUG_ENABLED] 
+https://next-auth.js.org/warnings#debug_enabled
+ GET /api/auth/session 200 in 65ms
+ ⚠ Cross origin request detected from 10.225.96.93 to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure "allowedDevOrigins" in next.config to allow this.
+Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins
+[Socket] Normalized target: {
+  original: ' http://localhost:8081',
+  normalized: ' http://localhost:8081',
+  path: '/socket.io'
+}
+ GET /tournaments 200 in 306ms
+ GET /api/auth/session 200 in 30ms
+ GET /api/auth/session 200 in 17ms
+ GET /api/auth/session 200 in 24ms
+ GET /api/auth/session 200 in 22ms
+ GET /api/auth/session 200 in 24ms
+[Socket] Normalized target: {
+  original: ' http://localhost:8081',
+  normalized: ' http://localhost:8081',
+  path: '/socket.io'
+}
+ GET /tournaments 200 in 66ms
+ GET /api/auth/session 200 in 37ms
+ GET /api/auth/session 200 in 15ms
+ GET /api/auth/session 200 in 17ms
+ GET /api/auth/session 200 in 17ms
+ GET /api/auth/session 200 in 25ms
+ GET /dashboard 200 in 105ms
+ GET /api/auth/session 200 in 46ms
+ GET /api/auth/session 200 in 34ms
+ GET /api/auth/session 200 in 34ms
+ GET /api/auth/session 200 in 22ms
+ GET /dashboard 200 in 133ms
+ GET /api/auth/session 200 in 46ms
+ GET /api/auth/session 200 in 30ms
+ GET /api/auth/session 200 in 28ms
+ GET /api/auth/session 200 in 29ms
+ GET /dashboard 200 in 114ms
+ GET /api/auth/session 200 in 69ms
+ GET /api/auth/session 200 in 29ms
+ GET /api/auth/session 200 in 34ms
+ GET /api/auth/session 200 in 31ms
+ GET /dashboard 200 in 57ms
+ GET /api/auth/session 200 in 64ms
+ GET /api/auth/session 200 in 53ms
+ GET /api/auth/session 200 in 72ms
+ GET /api/auth/session 200 in 58ms

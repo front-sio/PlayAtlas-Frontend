@@ -4,6 +4,16 @@ import React, { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { adminApi } from '@/lib/apiService';
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AccessDenied } from '@/components/admin/AccessDenied';
 import { canCreateTournaments, canViewTournaments, canManageTournaments } from '@/lib/permissions';
@@ -25,6 +35,13 @@ interface TournamentStats {
   totalPlayers?: number;
   activeSeasons?: number;
   statusCounts?: Record<string, number>;
+}
+
+interface Club {
+  clubId: string;
+  name: string;
+  locationText?: string | null;
+  status?: string;
 }
 
 interface TournamentSeason {
@@ -61,8 +78,9 @@ interface TournamentOverview {
 const computeAiDifficulty = (entryFeeValue: string) => {
   const entryFee = Number(entryFeeValue || 0);
   if (!entryFee) return '5';
-  const scaled = Math.round((entryFee / 1000) * 5);
-  const clamped = Math.max(1, Math.min(100, scaled));
+  const level = Math.max(1, Math.ceil(entryFee / 1000));
+  const scaled = level * 5;
+  const clamped = Math.max(1, Math.min(50, scaled));
   return String(clamped);
 };
 
@@ -82,6 +100,7 @@ export default function AdminTournamentsPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [creating, setCreating] = useState(false);
   const [createForm, setCreateForm] = useState({
+    clubId: '',
     name: '',
     description: '',
     entryFee: '',
@@ -92,11 +111,46 @@ export default function AdminTournamentsPage() {
     aiDifficulty: '5',
   });
   const [aiDifficultyTouched, setAiDifficultyTouched] = useState(false);
+  const [clubs, setClubs] = useState<Club[]>([]);
+  const [clubsLoading, setClubsLoading] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'stop' | 'resume';
+    tournament: Tournament;
+  } | null>(null);
+  const [confirmLoading, setConfirmLoading] = useState(false);
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
+  const [editingTournament, setEditingTournament] = useState<Tournament | null>(null);
+  const [updateForm, setUpdateForm] = useState({
+    name: '',
+    entryFee: '',
+    maxPlayers: '',
+    startTime: '',
+  });
+  const [updateLoading, setUpdateLoading] = useState(false);
+  const [updateError, setUpdateError] = useState('');
+  const [updateSuccess, setUpdateSuccess] = useState('');
 
   useEffect(() => {
     if (!canViewTournaments(role)) return;
     loadData();
   }, [token, role, statusFilter]);
+
+  useEffect(() => {
+    if (!token || !canCreateTournaments(role)) return;
+    setClubsLoading(true);
+    adminApi
+      .getClubs(token)
+      .then((result) => {
+        if (result.success && result.data) {
+          const payload = (result.data as any)?.data || result.data;
+          setClubs((payload || []) as Club[]);
+        }
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : 'Failed to load clubs');
+      })
+      .finally(() => setClubsLoading(false));
+  }, [token, role]);
 
   useEffect(() => {
     if (!tournaments.length) {
@@ -189,6 +243,50 @@ export default function AdminTournamentsPage() {
     }
   };
 
+  const handleStop = async (tournamentId: string) => {
+    if (!token) return;
+    try {
+      setError('');
+      setSuccess('');
+      const result = await adminApi.stopTournament(token, tournamentId);
+      if (result.success) {
+        const updated = (result.data as any) || {};
+        setTournaments((prev) =>
+          prev.map((tournament) =>
+            tournament.tournamentId === tournamentId
+              ? { ...tournament, status: updated.status || 'stopped', stage: updated.stage || tournament.stage }
+              : tournament
+          )
+        );
+        setSuccess('Tournament stopped.');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to stop tournament');
+    }
+  };
+
+  const handleResume = async (tournamentId: string) => {
+    if (!token) return;
+    try {
+      setError('');
+      setSuccess('');
+      const result = await adminApi.resumeTournament(token, tournamentId);
+      if (result.success) {
+        const updated = (result.data as any) || {};
+        setTournaments((prev) =>
+          prev.map((tournament) =>
+            tournament.tournamentId === tournamentId
+              ? { ...tournament, status: updated.status || 'active', stage: updated.stage || tournament.stage }
+              : tournament
+          )
+        );
+        setSuccess('Tournament resumed.');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to resume tournament');
+    }
+  };
+
   const handleCreateChange = (field: string, value: string) => {
     setCreateForm((prev) => {
       if (field === 'gameType' && value === 'with_ai') {
@@ -222,6 +320,7 @@ export default function AdminTournamentsPage() {
       setError('');
       setSuccess('');
       const payload: Record<string, any> = {
+        clubId: createForm.clubId,
         name: createForm.name,
         description: createForm.description,
         entryFee: Number(createForm.entryFee),
@@ -242,6 +341,7 @@ export default function AdminTournamentsPage() {
       if (result.success) {
         setSuccess('Tournament created successfully.');
         setCreateForm({
+          clubId: '',
           name: '',
           description: '',
           entryFee: '',
@@ -269,6 +369,125 @@ export default function AdminTournamentsPage() {
 
   const canCreate = canCreateTournaments(role);
   const isAiTournament = createForm.gameType === 'with_ai';
+  const confirmTitle = confirmAction?.type === 'stop' ? 'Pause tournament?' : 'Resume tournament?';
+  const confirmDescription =
+    confirmAction?.type === 'stop'
+      ? 'New seasons will stop until you resume this tournament.'
+      : 'Season generation will continue once this tournament is resumed.';
+  const confirmLabel = confirmAction?.type === 'stop' ? 'Pause Tournament' : 'Resume Tournament';
+
+  const formatLocalDateTime = (value?: string) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    const offset = date.getTimezoneOffset();
+    return new Date(date.getTime() - offset * 60000).toISOString().slice(0, 16);
+  };
+
+  const handleUpdateFormChange = (field: keyof typeof updateForm, value: string) => {
+    setUpdateForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const openUpdateDialog = (tournament: Tournament) => {
+    setEditingTournament(tournament);
+    setUpdateForm({
+      name: tournament.name,
+      entryFee: tournament.entryFee != null ? String(tournament.entryFee) : '',
+      maxPlayers: tournament.maxPlayers != null ? String(tournament.maxPlayers) : '',
+      startTime: formatLocalDateTime(tournament.startTime),
+    });
+    setUpdateError('');
+    setUpdateSuccess('');
+    setUpdateDialogOpen(true);
+  };
+
+  const handleUpdateDialogClose = () => {
+    if (updateLoading) return;
+    setUpdateDialogOpen(false);
+    setEditingTournament(null);
+    setUpdateError('');
+  };
+
+  const handleUpdateSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!token || !editingTournament) return;
+    setUpdateLoading(true);
+    setUpdateError('');
+    setUpdateSuccess('');
+    try {
+      const payload: Record<string, any> = {
+        name: updateForm.name,
+        entryFee: Number(updateForm.entryFee) || 0,
+      };
+      if (updateForm.maxPlayers) {
+        payload.maxPlayers = Number(updateForm.maxPlayers);
+      }
+      if (updateForm.startTime) {
+        const iso = new Date(updateForm.startTime);
+        if (!Number.isNaN(iso.getTime())) {
+          payload.startTime = iso.toISOString();
+        }
+      }
+
+      // Use the enhanced API function with automatic stop/update/resume workflow
+      const result = await adminApi.updateTournamentWithWorkflow(
+        token, 
+        editingTournament.tournamentId, 
+        payload,
+        'Updating tournament settings via admin dashboard'
+      );
+      
+      if (result.success && result.data) {
+        setTournaments((prev) =>
+          prev.map((tournament) =>
+            tournament.tournamentId === editingTournament.tournamentId
+              ? { ...tournament, ...result.data }
+              : tournament
+          )
+        );
+        
+        const successMessage = result.workflowExecuted 
+          ? 'Tournament updated successfully using stop → update → resume workflow'
+          : 'Tournament updated successfully';
+        
+        setUpdateSuccess(successMessage);
+        
+        // Show success for 3 seconds then close dialog
+        setTimeout(() => {
+          handleUpdateDialogClose();
+          setUpdateSuccess('');
+        }, 3000);
+      } else {
+        setUpdateError(result.error || 'Failed to update tournament');
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update tournament';
+      
+      // Check if this is the stop-first error and show helpful message
+      if (errorMessage.includes('Stop the tournament first') || errorMessage.includes('stop → update → resume')) {
+        setUpdateError(errorMessage);
+      } else {
+        setUpdateError(`Update failed: ${errorMessage}`);
+      }
+    } finally {
+      setUpdateLoading(false);
+    }
+  };
+
+  const handleConfirm = async () => {
+    if (!confirmAction) return;
+    setConfirmLoading(true);
+    try {
+      if (confirmAction.type === 'stop') {
+        await handleStop(confirmAction.tournament.tournamentId);
+      } else {
+        await handleResume(confirmAction.tournament.tournamentId);
+      }
+    } finally {
+      setConfirmLoading(false);
+      setConfirmAction(null);
+    }
+  };
 
   return (
     <div className="container mx-auto py-10 space-y-6">
@@ -279,6 +498,21 @@ export default function AdminTournamentsPage() {
           </CardHeader>
         <CardContent>
           <form className="grid gap-4 md:grid-cols-2" onSubmit={handleCreate}>
+            <select
+              value={createForm.clubId}
+              onChange={(event) => handleCreateChange('clubId', event.target.value)}
+              className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
+              required
+            >
+              <option value="" disabled>
+                {clubsLoading ? 'Loading clubs...' : 'Select club'}
+              </option>
+              {clubs.map((club) => (
+                <option key={club.clubId} value={club.clubId}>
+                  {club.name}
+                </option>
+              ))}
+            </select>
             <input
               value={createForm.name}
               onChange={(event) => handleCreateChange('name', event.target.value)}
@@ -389,7 +623,7 @@ export default function AdminTournamentsPage() {
             onChange={(event) => setStatusFilter(event.target.value)}
             className="w-full rounded border border-input bg-background px-3 py-2 text-sm md:w-48"
           >
-            {['all', 'upcoming', 'active', 'completed', 'cancelled'].map((status) => (
+            {['all', 'upcoming', 'active', 'stopped', 'completed', 'cancelled'].map((status) => (
               <option key={status} value={status}>
                 {status.charAt(0).toUpperCase() + status.slice(1)}
               </option>
@@ -400,6 +634,11 @@ export default function AdminTournamentsPage() {
           {error && (
             <div className="mb-4 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
               {error}
+            </div>
+          )}
+          {updateSuccess && (
+            <div className="mb-4 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+              {updateSuccess}
             </div>
           )}
           {loading ? (
@@ -448,6 +687,30 @@ export default function AdminTournamentsPage() {
                                 Start
                               </Button>
                             )}
+                            {tournament.status === 'active' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setConfirmAction({ type: 'stop', tournament })}
+                              >
+                                Stop
+                              </Button>
+                            )}
+                            {tournament.status === 'stopped' && (
+                              <Button
+                                size="sm"
+                                onClick={() => setConfirmAction({ type: 'resume', tournament })}
+                              >
+                                Resume
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openUpdateDialog(tournament)}
+                            >
+                              Update
+                            </Button>
                             {tournament.status !== 'cancelled' && (
                               <Button variant="destructive" size="sm" onClick={() => handleCancel(tournament.tournamentId)}>
                                 Cancel
@@ -564,6 +827,111 @@ export default function AdminTournamentsPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Simple modal that we know works */}
+      {updateDialogOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg max-w-md w-full mx-4">
+            <form onSubmit={handleUpdateSubmit} className="space-y-4">
+              <h2 className="text-lg font-bold mb-4">Update Tournament</h2>
+              <p className="text-sm text-gray-600">
+                Tournament: {editingTournament?.name}<br/>
+                Status: {editingTournament?.status}
+                {editingTournament?.status === 'active' && (
+                  <span className="text-orange-600"><br/>⚠️ System will stop → update → resume</span>
+                )}
+              </p>
+              
+              <div className="space-y-3">
+                <input
+                  value={updateForm.name}
+                  onChange={(e) => handleUpdateFormChange('name', e.target.value)}
+                  placeholder="Tournament name"
+                  className="w-full px-3 py-2 border rounded"
+                  required
+                />
+                <input
+                  value={updateForm.entryFee}
+                  onChange={(e) => handleUpdateFormChange('entryFee', e.target.value)}
+                  placeholder="Entry fee"
+                  type="number"
+                  className="w-full px-3 py-2 border rounded"
+                  required
+                />
+                <input
+                  value={updateForm.maxPlayers}
+                  onChange={(e) => handleUpdateFormChange('maxPlayers', e.target.value)}
+                  placeholder="Max players"
+                  type="number"
+                  className="w-full px-3 py-2 border rounded"
+                />
+                <input
+                  value={updateForm.startTime}
+                  onChange={(e) => handleUpdateFormChange('startTime', e.target.value)}
+                  type="datetime-local"
+                  className="w-full px-3 py-2 border rounded"
+                />
+              </div>
+
+              {updateError && (
+                <div className="p-2 bg-red-100 text-red-700 text-sm rounded">
+                  {updateError}
+                </div>
+              )}
+              
+              {updateSuccess && (
+                <div className="p-2 bg-green-100 text-green-700 text-sm rounded">
+                  {updateSuccess}
+                </div>
+              )}
+
+              <div className="flex gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={handleUpdateDialogClose}
+                  className="px-4 py-2 bg-gray-200 rounded"
+                  disabled={updateLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white rounded"
+                  disabled={updateLoading}
+                >
+                  {updateLoading ? 'Updating...' : 'Update'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Remove all other modal code temporarily */}
+
+      <AlertDialog open={!!confirmAction} onOpenChange={(open) => !open && setConfirmAction(null)}>
+        <AlertDialogContent className="border-slate-200 bg-white text-slate-900">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmTitle}</AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-500">
+              {confirmAction?.tournament?.name ? `${confirmAction.tournament.name}. ` : ''}
+              {confirmDescription}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel asChild>
+              <Button variant="outline" disabled={confirmLoading}>
+                Cancel
+              </Button>
+            </AlertDialogCancel>
+            <AlertDialogAction asChild>
+              <Button onClick={handleConfirm} disabled={confirmLoading}>
+                {confirmLoading ? 'Please wait...' : confirmLabel}
+              </Button>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

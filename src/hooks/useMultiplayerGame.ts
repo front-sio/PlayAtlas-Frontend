@@ -1,7 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { gameSocketService, GameState } from '@/lib/gameSocketService';
 import { matchmakingSocketService } from '@/lib/matchmakingSocketService';
-import { PoolGameEngine } from '@/lib/pool/engine';
 
 interface UseMultiplayerGameProps {
   playerId: string;
@@ -41,8 +40,6 @@ export function useMultiplayerGame({ playerId, matchId, sessionId }: UseMultipla
     matchData: null,
     gameStarted: false,
   });
-
-  const gameEngineRef = useRef<PoolGameEngine | null>(null);
 
   // Initialize socket connections
   useEffect(() => {
@@ -105,10 +102,6 @@ export function useMultiplayerGame({ playerId, matchId, sessionId }: UseMultipla
           loading: false,
         }));
 
-        // Initialize game engine with received state
-        if (!gameEngineRef.current) {
-          gameEngineRef.current = new PoolGameEngine({ mode: 'match', onHud: () => {} });
-        }
       })
     );
 

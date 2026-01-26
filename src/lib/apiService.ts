@@ -1,7 +1,8 @@
 // src/lib/apiService.ts
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, '') || 'http://localhost:8080/api';
+import { getApiBaseUrl } from '@/lib/apiBase';
+
+const API_BASE_URL = getApiBaseUrl();
 
 const getSessionAccessToken = async () => {
   if (typeof window === 'undefined') return null;
@@ -137,8 +138,8 @@ const request = async (
       opts.body === undefined
         ? undefined
         : isJson
-        ? JSON.stringify(opts.body)
-        : (opts.body as string),
+          ? JSON.stringify(opts.body)
+          : (opts.body as string),
   });
 
   // Retry once if the session has refreshed its access token
@@ -158,10 +159,20 @@ export const authApi = {
     request('/auth/register', { method: 'POST', body: data, json: true }),
 
   login: async (data: any) => {
+    console.log("🔐 Making login request to:", `${API_BASE_URL}/auth/login`);
+    console.log("📤 Login payload:", { identifier: data.identifier, passwordLength: data.password?.length });
     
     try {
-      return await request('/auth/login', { method: 'POST', body: data, json: true });
-    } catch (fetchError) {
+      const result = await request('/auth/login', { method: 'POST', body: data, json: true, skipAuth: true });
+      console.log("📥 Login response:", { success: result.success, hasData: !!result.data });
+      return result;
+    } catch (fetchError: any) {
+      console.error("💥 Login request failed:", {
+        message: fetchError.message,
+        status: fetchError.status,
+        url: fetchError.url,
+        rawResponse: fetchError.rawResponse?.slice(0, 500),
+      });
       throw fetchError;
     }
   },
@@ -194,6 +205,25 @@ export const authApi = {
 
   getCurrentUser: async (token: string) =>
     request('/auth/me', { method: 'GET', token }),
+
+  changePassword: async (token: string, data: { currentPassword: string; newPassword: string }) =>
+    request('/auth/change-password', { method: 'POST', token, body: data, json: true }),
+
+  updateAvatar: async (token: string, file: File) => {
+    const formData = new FormData();
+    formData.append('avatar', file);
+
+    // Use fetch directly for FormData to avoid Content-Type header issues
+    const res = await fetch(`${API_BASE_URL}/auth/avatar`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    return handleResponse(res);
+  },
 
   updatePayoutPhone: async (token: string, phoneNumber: string) =>
     request('/auth/payout-phone', { method: 'PUT', token, body: { phoneNumber }, json: true }),
@@ -298,11 +328,12 @@ export const walletApi = {
 
 // -------------------- Tournament API (leave if your backend matches these routes) --------------------
 export const tournamentApi = {
-  getTournaments: async (page = 1, limit = 20, status?: string) => {
+  getTournaments: async (page = 1, limit = 20, status?: string, clubId?: string) => {
     const params = new URLSearchParams();
     params.set('page', String(page));
     params.set('limit', String(limit));
     if (status) params.set('status', status);
+    if (clubId) params.set('clubId', clubId);
     return request(`/tournament?${params.toString()}`, { method: 'GET' });
   },
 
@@ -390,8 +421,8 @@ export const paymentApi = {
 
   // Admin endpoints for finance officers
   approveDeposit: async (token: string, depositId: string, transactionMessage?: string) =>
-    request(`/payment/deposit/${encodeURIComponent(depositId)}/approve`, { 
-      method: 'POST', 
+    request(`/payment/deposit/${encodeURIComponent(depositId)}/approve`, {
+      method: 'POST',
       token,
       ...(transactionMessage && {
         body: { transactionMessage },
@@ -399,12 +430,25 @@ export const paymentApi = {
       })
     }),
 
+  getDepositByTid: async (token: string, tid: string) => {
+    const query = `?tid=${encodeURIComponent(tid)}`;
+    return request(`/payment/admin/deposits/by-tid${query}`, { method: 'GET', token });
+  },
+
+  approveDepositByTid: async (token: string, tid: string, transactionMessage?: string) =>
+    request('/payment/admin/deposits/approve-by-tid', {
+      method: 'POST',
+      token,
+      body: { tid, transactionMessage },
+      json: true
+    }),
+
   rejectDeposit: async (token: string, depositId: string, reason: string) =>
-    request(`/payment/deposit/${encodeURIComponent(depositId)}/reject`, { 
-      method: 'POST', 
-      token, 
-      body: { reason }, 
-      json: true 
+    request(`/payment/deposit/${encodeURIComponent(depositId)}/reject`, {
+      method: 'POST',
+      token,
+      body: { reason },
+      json: true
     }),
 
   getPendingDeposits: async (token: string, status?: string) => {
@@ -418,8 +462,8 @@ export const paymentApi = {
   },
 
   approveWithdrawal: async (token: string, withdrawalId: string, transactionMessage?: string) =>
-    request(`/payment/withdrawal/${encodeURIComponent(withdrawalId)}/approve`, { 
-      method: 'POST', 
+    request(`/payment/withdrawal/${encodeURIComponent(withdrawalId)}/approve`, {
+      method: 'POST',
       token,
       ...(transactionMessage && {
         body: { transactionMessage },
@@ -475,24 +519,95 @@ export const paymentApi = {
     request(`/payment/float-adjustment/requests/${encodeURIComponent(requestId)}`, { method: 'GET', token }),
 
   approveFloatAdjustment: async (token: string, requestId: string, comments?: string) =>
-    request(`/payment/float-adjustment/${encodeURIComponent(requestId)}/approve`, { 
-      method: 'POST', 
-      token, 
-      body: { comments }, 
-      json: true 
+    request(`/payment/float-adjustment/${encodeURIComponent(requestId)}/approve`, {
+      method: 'POST',
+      token,
+      body: { comments },
+      json: true
     }),
 
   rejectFloatAdjustment: async (token: string, requestId: string, reason: string) =>
-    request(`/payment/float-adjustment/${encodeURIComponent(requestId)}/reject`, { 
-      method: 'POST', 
-      token, 
-      body: { reason }, 
-      json: true 
+    request(`/payment/float-adjustment/${encodeURIComponent(requestId)}/reject`, {
+      method: 'POST',
+      token,
+      body: { reason },
+      json: true
     }),
+
+  // TID-based approval functions
+  searchByTid: async (token: string, tid: string) => {
+    const query = `?tid=${encodeURIComponent(tid)}`;
+    return request(`/payment/admin/sms-messages/search${query}`, { method: 'GET', token });
+  },
+
+  storeSmsMessage: async (token: string, rawText: string, linkedDepositId?: string) =>
+    request('/payment/admin/sms-messages', {
+      method: 'POST',
+      token,
+      body: { rawText, linkedDepositId },
+      json: true
+    }),
+
+  attachMessageToDeposit: async (token: string, depositId: string, data: { tid?: string; messageId?: string }) =>
+    request(`/payment/admin/deposits/${encodeURIComponent(depositId)}/attach-message`, {
+      method: 'POST',
+      token,
+      body: data,
+      json: true
+    }),
+
+  approveDepositWithTid: async (token: string, depositId: string, data: { tid?: string; transactionMessage?: string }) =>
+    request(`/payment/admin/deposits/${encodeURIComponent(depositId)}/approve-with-tid`, {
+      method: 'POST',
+      token,
+      body: data,
+      json: true
+    }),
+
+  getSmsMessages: async (token: string, options?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    provider?: string;
+    tid?: string;
+    hasLinkedDeposit?: boolean;
+  }) => {
+    const params = new URLSearchParams();
+    if (options?.page) params.set('page', String(options.page));
+    if (options?.limit) params.set('limit', String(options.limit));
+    if (options?.status) params.set('status', options.status);
+    if (options?.provider) params.set('provider', options.provider);
+    if (options?.tid) params.set('tid', options.tid);
+    if (options?.hasLinkedDeposit !== undefined) params.set('hasLinkedDeposit', String(options.hasLinkedDeposit));
+
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return request(`/payment/admin/sms-messages${query}`, { method: 'GET', token });
+  },
+
+  getSmsMessageStats: async (token: string) =>
+    request('/payment/admin/sms-messages/stats', { method: 'GET', token }),
 };
 
 // -------------------- Admin API --------------------
 export const adminApi = {
+  getClubs: async (token: string, status?: string, limit = 100, offset = 0) => {
+    const params = new URLSearchParams();
+    if (status) params.set('status', status);
+    params.set('limit', String(limit));
+    params.set('offset', String(offset));
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return request(`/admin/clubs${query}`, { method: 'GET', token });
+  },
+
+  createClub: async (token: string, data: any) =>
+    request('/admin/clubs', { method: 'POST', token, body: data, json: true }),
+
+  updateClub: async (token: string, clubId: string, data: any) =>
+    request(`/admin/clubs/${encodeURIComponent(clubId)}`, { method: 'PUT', token, body: data, json: true }),
+
+  deleteClub: async (token: string, clubId: string) =>
+    request(`/admin/clubs/${encodeURIComponent(clubId)}`, { method: 'DELETE', token }),
+
   getUsers: async (token: string, role?: string, limit = 50, offset = 0) => {
     const params = new URLSearchParams();
     if (role) params.set('role', role);
@@ -553,10 +668,72 @@ export const adminApi = {
       json: true
     }),
 
-  startTournament: async (token: string, tournamentId: string) =>
-    request(`/admin/tournaments/${encodeURIComponent(tournamentId)}/start`, {
+  updateTournament: async (token: string, tournamentId: string, data: any) => {
+    try {
+      return await request(`/admin/tournaments/${encodeURIComponent(tournamentId)}`, {
+        method: 'PUT',
+        token,
+        body: data,
+        json: true
+      });
+    } catch (error: any) {
+      // Handle the specific case where tournament needs to be stopped first
+      if (error.status === 400 && error.data?.requiresStop) {
+        throw new Error(`${error.data.error}\n\nCurrent Status: ${error.data.currentStatus}\nRequired: Stop → Update → Resume`);
+      }
+      throw error;
+    }
+  },
+
+  stopTournament: async (token: string, tournamentId: string, reason?: string) =>
+    request(`/admin/tournaments/${encodeURIComponent(tournamentId)}/stop`, {
+      method: 'POST',
+      token,
+      body: reason ? { reason } : undefined,
+      json: !!reason
+    }),
+
+  resumeTournament: async (token: string, tournamentId: string) =>
+    request(`/admin/tournaments/${encodeURIComponent(tournamentId)}/resume`, {
       method: 'POST',
       token
+    }),
+
+  // New: Combined stop-update-resume workflow
+  updateTournamentWithWorkflow: async (token: string, tournamentId: string, data: any, stopReason?: string) => {
+    try {
+      // Try direct update first
+      return await adminApi.updateTournament(token, tournamentId, data);
+    } catch (error: any) {
+      if (error.message?.includes('Stop the tournament first')) {
+        // Tournament is active, need workflow: stop → update → resume
+        console.log('Tournament is active. Executing stop → update → resume workflow...');
+        
+        // Step 1: Stop tournament
+        await adminApi.stopTournament(token, tournamentId, stopReason || 'Updating tournament settings');
+        
+        // Step 2: Update tournament
+        const updateResult = await adminApi.updateTournament(token, tournamentId, data);
+        
+        // Step 3: Resume tournament
+        await adminApi.resumeTournament(token, tournamentId);
+        
+        return {
+          ...updateResult,
+          workflowExecuted: true,
+          message: 'Tournament updated successfully using stop → update → resume workflow'
+        };
+      }
+      throw error;
+    }
+  },
+
+  repairSeasonFixtures: async (token: string, data: { tournamentId?: string; limit?: number; dryRun?: boolean }) =>
+    request('/admin/tournaments/seasons/repair', {
+      method: 'POST',
+      token,
+      body: data,
+      json: true
     }),
 
   getGameSessions: async (token: string, status?: string, limit = 50) => {
@@ -580,6 +757,46 @@ export const adminApi = {
       body: { startDate, endDate },
       json: true
     }),
+
+  getClubRevenue: async (token: string, clubId: string, startDate: string, endDate: string) => {
+    const params = new URLSearchParams({ startDate, endDate });
+    return request(`/admin/payments/clubs/${encodeURIComponent(clubId)}/revenue?${params.toString()}`, {
+      method: 'GET',
+      token
+    });
+  },
+
+  getClubEarnings: async (token: string, clubId: string, startDate: string, endDate: string) => {
+    const params = new URLSearchParams({ startDate, endDate });
+    return request(`/admin/payments/clubs/${encodeURIComponent(clubId)}/earnings?${params.toString()}`, {
+      method: 'GET',
+      token
+    });
+  },
+
+  computeClubEarnings: async (token: string, clubId: string, date: string) =>
+    request(`/admin/payments/clubs/${encodeURIComponent(clubId)}/earnings/compute`, {
+      method: 'POST',
+      token,
+      body: { date },
+      json: true
+    }),
+
+  finalizeClubEarnings: async (token: string, clubId: string, date: string) =>
+    request(`/admin/payments/clubs/${encodeURIComponent(clubId)}/earnings/finalize`, {
+      method: 'POST',
+      token,
+      body: { date },
+      json: true
+    }),
+
+  getClubPayouts: async (token: string, clubId: string, startDate: string, endDate: string) => {
+    const params = new URLSearchParams({ startDate, endDate });
+    return request(`/admin/payments/clubs/${encodeURIComponent(clubId)}/payouts?${params.toString()}`, {
+      method: 'GET',
+      token
+    });
+  }
 };
 
 // -------------------- Agent API --------------------
@@ -601,6 +818,11 @@ export const agentApi = {
 
   listEarnings: async (token: string) =>
     request('/agent/earnings', { method: 'GET', token }),
+
+  listMatches: async (token: string, status?: string) => {
+    const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+    return request(`/agent/matches${qs}`, { method: 'GET', token });
+  },
 };
 
 // -------------------- Matchmaking API --------------------
@@ -611,8 +833,23 @@ export const matchmakingApi = {
     return request(`${base}${qs}`, { method: 'GET' });
   },
 
+  getPlayerMatchesMultiplayer: async (playerId: string, status?: string) => {
+    const base = `/matchmaking/multiplayer/player/${encodeURIComponent(playerId)}/matches`;
+    const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+    return request(`${base}${qs}`, { method: 'GET' });
+  },
+
   getMatch: async (matchId: string) =>
     request(`/matchmaking/match/${encodeURIComponent(matchId)}`, { method: 'GET' }),
+
+  getMatchMultiplayer: async (matchId: string) =>
+    request(`/matchmaking/multiplayer/match/${encodeURIComponent(matchId)}`, { method: 'GET' }),
+
+  getSeasonBracket: async (seasonId: string, token?: string) =>
+    request(`/matchmaking/season/${encodeURIComponent(seasonId)}/bracket`, { method: 'GET', token }),
+
+  startMatch: async (matchId: string, data: any, token?: string) =>
+    request(`/matchmaking/matches/${encodeURIComponent(matchId)}/start`, { method: 'POST', token, body: data, json: true }),
 
   updateMatchResult: async (matchId: string, data: any, token?: string) =>
     request(`/matchmaking/match/${encodeURIComponent(matchId)}/result`, { method: 'PUT', token, body: data, json: true }),
@@ -620,8 +857,10 @@ export const matchmakingApi = {
 
 // -------------------- Lookup API --------------------
 export const lookupApi = {
-  resolveMatchLookups: async (data: { opponentIds: string[]; tournamentIds: string[] }, token?: string) =>
-    request('/lookup/matches', { method: 'POST', token, body: data, json: true })
+  resolveMatchLookups: async (
+    data: { opponentIds: string[]; tournamentIds: string[]; agentUserIds?: string[] },
+    token?: string
+  ) => request('/lookup/matches', { method: 'POST', token, body: data, json: true })
 };
 
 // -------------------- Backward compatibility exports --------------------
@@ -644,4 +883,35 @@ export const handleApiError = (error: any) => {
   }
 
   return error;
+};
+
+export const getAvatarUrl = (path: string | undefined | null) => {
+  if (!path) return '';
+  if (path.startsWith('http')) return path;
+  if (path.startsWith('data:')) return path;
+
+  // If path starts with /uploads, prepend the API base URL (without /api suffix if needed)
+  // Our API_BASE_URL includes /api, so we need to strip it or adjust.
+  // The auth service serves /uploads at root, but via gateway it might be /api/auth/uploads? 
+  // Or if gateway proxies /api/auth -> auth-service, then /api/auth/uploads -> auth-service/uploads
+  // Let's assume /api/auth/uploads works if we configured it, but we configured app.use('/uploads') in auth-service.
+  // So it's available at auth-service:port/uploads.
+  // Via gateway: /api/auth/uploads should map to auth-service/uploads.
+
+  // Let's try to use the API_BASE_URL but replace /api with /api/auth if needed, or just append if path is relative.
+  // Actually, if we use the gateway, we can access it via /api/auth/uploads if we add a route in gateway or if auth service handles it.
+  // But wait, express.static is on root of auth-service.
+  // Gateway maps /api/auth -> auth-service.
+  // So /api/auth/uploads/avatars/x.jpg -> auth-service/uploads/avatars/x.jpg.
+  // This should work!
+
+  // API_BASE_URL is http://host:port/api
+  // We want http://host:port/api/auth/uploads/...
+  // So we can just append /auth + path (if path starts with /uploads)
+
+  const baseUrl = API_BASE_URL.replace(/\/+$/, '');
+  // If path starts with /, remove it to avoid double slash
+  const cleanPath = path.startsWith('/') ? path.substring(1) : path;
+
+  return `${baseUrl}/auth/${cleanPath}`;
 };

@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AccessDenied } from '@/components/admin/AccessDenied';
 import { canViewFinancialReports } from '@/lib/permissions';
+import { getApiBaseUrl } from '@/lib/apiBase';
 import {
   Award,
   TrendingUp,
@@ -47,6 +48,26 @@ interface PlayerRevenueData {
     profitabilityScore: number;
     currency: string;
   }>;
+  data?: Array<{
+    id: string;
+    playerId: string;
+    username: string;
+    agentId?: string;
+    agentName?: string;
+    date: string;
+    period: string;
+    totalWinnings: number;
+    totalLosses: number;
+    feesPaid: number;
+    netProfit: number;
+    totalDeposits: number;
+    totalWithdrawals: number;
+    gamesPlayed: number;
+    tournamentsPlayed: number;
+    lifetimeValue: number;
+    profitabilityScore: number;
+    currency: string;
+  }>;
   pagination: {
     total: number;
     limit: number;
@@ -59,6 +80,7 @@ export default function PlayerRevenuePage() {
   const { data: session, status } = useSession();
   const role = (session?.user as any)?.role;
   const token = (session as any)?.accessToken;
+  const apiBase = getApiBaseUrl();
   
   const [revenueData, setRevenueData] = useState<PlayerRevenueData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -69,6 +91,7 @@ export default function PlayerRevenuePage() {
   const [currentPage, setCurrentPage] = useState(0);
   const [itemsPerPage, setItemsPerPage] = useState(20);
   const [sortBy, setSortBy] = useState<'lifetimeValue' | 'netProfit' | 'profitabilityScore'>('lifetimeValue');
+  const [activePlayerId, setActivePlayerId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token || (role && !canViewFinancialReports(role))) return;
@@ -83,7 +106,7 @@ export default function PlayerRevenuePage() {
         const start = new Date();
         start.setMonth(start.getMonth() - 1);
 
-        const url = new URL(`${process.env.NEXT_PUBLIC_API_URL}/revenue/player`);
+        const url = new URL(`${apiBase}/revenue/player`);
         url.searchParams.append('startDate', start.toISOString());
         url.searchParams.append('endDate', end.toISOString());
         url.searchParams.append('limit', itemsPerPage.toString());
@@ -137,6 +160,16 @@ export default function PlayerRevenuePage() {
     if (score > -50) return 'Negative';
     return 'High Loss';
   };
+
+  const activePlayer = activePlayerId
+    ? revenueData?.topPlayers.find((player) => player.playerId === activePlayerId) || null
+    : null;
+
+  const activePlayerHistory = activePlayerId
+    ? (revenueData?.data || [])
+        .filter((row) => row.playerId === activePlayerId)
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    : [];
 
   const handleExport = () => {
     if (!revenueData) return;
@@ -345,12 +378,13 @@ export default function PlayerRevenuePage() {
                       <th className="text-right py-3 px-4 text-sm font-medium text-slate-500">Fees Paid</th>
                       <th className="text-right py-3 px-4 text-sm font-medium text-slate-500">Games</th>
                       <th className="text-right py-3 px-4 text-sm font-medium text-slate-500">Profitability</th>
+                      <th className="text-right py-3 px-4 text-sm font-medium text-slate-500">Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {revenueData.topPlayers.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="py-8 text-center text-sm text-slate-500">
+                        <td colSpan={9} className="py-8 text-center text-sm text-slate-500">
                           No player data available
                         </td>
                       </tr>
@@ -392,12 +426,104 @@ export default function PlayerRevenuePage() {
                             </span>
                             <span className="ml-1 text-slate-500">({player.profitabilityScore.toFixed(0)})</span>
                           </td>
+                          <td className="py-3 px-4 text-sm text-right">
+                            <button
+                              onClick={() => setActivePlayerId(player.playerId)}
+                              className="text-sm font-medium text-slate-700 hover:text-slate-900"
+                            >
+                              View
+                            </button>
+                          </td>
                         </tr>
                       ))
                     )}
                   </tbody>
                 </table>
               </div>
+
+              {activePlayer && (
+                <div className="mt-6 border-t border-slate-100 pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">
+                        {activePlayer.username || `Player ${activePlayer.playerId.slice(0, 8)}`} Progression
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {activePlayer.agentName ? `Agent: ${activePlayer.agentName}` : 'No agent assigned'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setActivePlayerId(null)}
+                      className="text-xs font-medium text-slate-500 hover:text-slate-700"
+                    >
+                      Clear
+                    </button>
+                  </div>
+
+                  <div className="mt-4 grid gap-4 md:grid-cols-3">
+                    <div>
+                      <p className="text-xs text-slate-500">Monthly Revenue</p>
+                      <p className="text-lg font-semibold text-slate-900">
+                        {formatCurrency(activePlayer.totalWinnings)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">Net Profit</p>
+                      <p className="text-lg font-semibold text-slate-900">
+                        {formatCurrency(activePlayer.netProfit)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">Lifetime Value</p>
+                      <p className="text-lg font-semibold text-slate-900">
+                        {formatCurrency(activePlayer.lifetimeValue)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-6">
+                    <p className="text-sm font-medium text-slate-700">Daily Progression</p>
+                    <div className="mt-3 overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-slate-200">
+                            <th className="text-left py-2 px-3 text-xs font-medium text-slate-500">Date</th>
+                            <th className="text-right py-2 px-3 text-xs font-medium text-slate-500">Revenue</th>
+                            <th className="text-right py-2 px-3 text-xs font-medium text-slate-500">Net</th>
+                            <th className="text-right py-2 px-3 text-xs font-medium text-slate-500">LTV</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {activePlayerHistory.length === 0 ? (
+                            <tr>
+                              <td colSpan={4} className="py-4 text-center text-sm text-slate-500">
+                                No progression data available
+                              </td>
+                            </tr>
+                          ) : (
+                            activePlayerHistory.map((row) => (
+                              <tr key={row.id} className="border-b border-slate-100">
+                                <td className="py-2 px-3 text-sm text-slate-700">
+                                  {new Date(row.date).toLocaleDateString('en-TZ', { month: 'short', day: 'numeric' })}
+                                </td>
+                                <td className="py-2 px-3 text-sm text-right text-slate-900">
+                                  {formatCurrency(row.totalWinnings)}
+                                </td>
+                                <td className="py-2 px-3 text-sm text-right text-slate-900">
+                                  {formatCurrency(row.netProfit)}
+                                </td>
+                                <td className="py-2 px-3 text-sm text-right text-slate-900">
+                                  {formatCurrency(row.lifetimeValue)}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Pagination */}
               {revenueData.pagination.pages > 1 && (

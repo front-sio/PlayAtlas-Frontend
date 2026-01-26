@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowUpRight, ArrowDownLeft, Wallet, Plus, Minus, RefreshCw, Eye, EyeOff, Smartphone, Building, History, TrendingUp, AlertCircle, CheckCircle, Clock, Send, Download, Copy, Check } from 'lucide-react';
 import { getWalletBalance, withdrawFunds, paymentApi } from '@/lib/apiService';
+import { getApiBaseUrl } from '@/lib/apiBase';
 import { PageLoader } from '@/components/ui/page-loader';
 import PaymentConfirmation from '@/components/PaymentConfirmation';
 import AlertModal from '@/components/ui/AlertModal';
@@ -58,8 +59,10 @@ interface DepositReceipt {
 
 const WalletPage: React.FC = () => {
   const { data: session, status } = useSession();
+  const apiBase = getApiBaseUrl();
   const { socket } = useSocket({ enabled: true });
   const [balance, setBalance] = useState(0);
+  const [revenueBalance, setRevenueBalance] = useState(0);
   const [walletId, setWalletId] = useState<string | null>(null);
   const [showBalance, setShowBalance] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -70,6 +73,7 @@ const WalletPage: React.FC = () => {
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawPhoneNumber, setWithdrawPhoneNumber] = useState('');
   const [withdrawMethod, setWithdrawMethod] = useState<'airtel' | 'mpesa' | 'tigopesa' | 'halopesa' | 'bank'>('mpesa');
+  const [withdrawSource, setWithdrawSource] = useState<'deposit' | 'revenue'>('deposit');
   const [transferAmount, setTransferAmount] = useState('');
   const [transferPhoneNumber, setTransferPhoneNumber] = useState('');
   const [transferDescription, setTransferDescription] = useState('');
@@ -130,6 +134,9 @@ const WalletPage: React.FC = () => {
         const balanceData = await getWalletBalance(token);
         if (balanceData?.data?.balance !== undefined) {
           setBalance(balanceData.data.balance);
+          if (balanceData.data.revenueBalance !== undefined) {
+            setRevenueBalance(balanceData.data.revenueBalance);
+          }
         }
         await refreshTransactions(token);
       }
@@ -303,6 +310,9 @@ const WalletPage: React.FC = () => {
     hasDepositAmount &&
     ((typeof minDepositAmount === 'number' && parsedDepositAmount < minDepositAmount) ||
       (typeof maxDepositAmount === 'number' && parsedDepositAmount > maxDepositAmount));
+  const depositBalance = Math.max(0, balance - revenueBalance);
+  const availableWithdrawalBalance =
+    withdrawSource === 'revenue' ? revenueBalance : depositBalance;
 
   // Persist pending deposits across page refreshes
   useEffect(() => {
@@ -384,6 +394,9 @@ const WalletPage: React.FC = () => {
           const balanceData = await getWalletBalance(authToken);
           if (balanceData?.data?.balance !== undefined) {
             setBalance(balanceData.data.balance);
+            if (balanceData.data.revenueBalance !== undefined) {
+              setRevenueBalance(balanceData.data.revenueBalance);
+            }
           }
           if (balanceData?.data?.walletId) {
             setWalletId(balanceData.data.walletId);
@@ -603,8 +616,9 @@ const WalletPage: React.FC = () => {
       return;
     }
 
-    if (parseFloat(withdrawAmount) > balance) {
-      showAlert('Insufficient Balance', 'You do not have enough balance to withdraw this amount.', 'error');
+    if (parseFloat(withdrawAmount) > availableWithdrawalBalance) {
+      const sourceLabel = withdrawSource === 'revenue' ? 'revenue' : 'deposit';
+      showAlert('Insufficient Balance', `You do not have enough ${sourceLabel} balance to withdraw this amount.`, 'error');
       return;
     }
 
@@ -621,7 +635,8 @@ const WalletPage: React.FC = () => {
         amount: parseFloat(withdrawAmount),
         paymentMethod: withdrawMethod,
         phoneNumber: withdrawPhoneNumber,
-        description: withdrawMethod === 'bank' ? 'Bank Transfer Withdrawal' : `${withdrawMethod.toUpperCase()} Withdrawal`
+        description: withdrawMethod === 'bank' ? 'Bank Transfer Withdrawal' : `${withdrawMethod.toUpperCase()} Withdrawal`,
+        withdrawalSource: withdrawSource
       };
 
       const response = await withdrawFunds(token, withdrawalData);
@@ -698,7 +713,7 @@ const WalletPage: React.FC = () => {
         return;
       }
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/payment/transfer`, {
+      const response = await fetch(`${apiBase}/payment/transfer`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -736,8 +751,10 @@ const WalletPage: React.FC = () => {
       
       if (data?.success) {
         // Update balance immediately (instant transfer)
-        const newBalance = balance - parsedTransferAmount;
-        setBalance(newBalance);
+        const depositPortion = Math.min(depositBalance, parsedTransferAmount);
+        const revenuePortion = Math.max(0, parsedTransferAmount - depositPortion);
+        setBalance((prev) => prev - parsedTransferAmount);
+        setRevenueBalance((prev) => Math.max(0, prev - revenuePortion));
 
         // Create transaction record
         const newTransaction: Transaction = {
@@ -823,7 +840,7 @@ const WalletPage: React.FC = () => {
       try {
         const normalized = normalizePhoneNumber(trimmed);
         const lookupResponse = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/wallet/transfer/lookup/phone/${encodeURIComponent(normalized)}`,
+          `${apiBase}/wallet/transfer/lookup/phone/${encodeURIComponent(normalized)}`,
           {
             method: 'GET',
             headers: { 'Authorization': `Bearer ${token}` }
@@ -967,7 +984,7 @@ const WalletPage: React.FC = () => {
 
         <Card className="bg-white/5 border-white/10">
           <CardHeader className="pb-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="text-white">Available Balance</CardTitle>
               <Button
                 variant="ghost"
@@ -984,6 +1001,20 @@ const WalletPage: React.FC = () => {
               <span className="text-2xl font-semibold text-white/80">Tsh</span>
               <span className={`text-5xl font-bold ${showBalance ? 'text-white' : 'blur-sm text-white/50'}`}>
                 {showBalance ? balance.toLocaleString() : '••••'}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-4 text-xs text-white/60">
+              <span>
+                Revenue balance:{' '}
+                <span className={showBalance ? 'text-white' : 'blur-sm text-white/50'}>
+                  {showBalance ? `Tsh ${revenueBalance.toLocaleString()}` : '••••'}
+                </span>
+              </span>
+              <span>
+                Deposit balance:{' '}
+                <span className={showBalance ? 'text-white' : 'blur-sm text-white/50'}>
+                  {showBalance ? `Tsh ${depositBalance.toLocaleString()}` : '••••'}
+                </span>
               </span>
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
@@ -1038,7 +1069,7 @@ const WalletPage: React.FC = () => {
           <TabsContent value="transactions" className="space-y-4">
             <Card className="bg-white/5 border-white/10">
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <CardTitle className="text-white">Transaction History</CardTitle>
                     <CardDescription className="text-white/60">
@@ -1057,6 +1088,9 @@ const WalletPage: React.FC = () => {
                         const balanceData = await getWalletBalance(token);
                         if (balanceData?.data?.balance !== undefined) {
                           setBalance(balanceData.data.balance);
+                          if (balanceData.data.revenueBalance !== undefined) {
+                            setRevenueBalance(balanceData.data.revenueBalance);
+                          }
                         }
                         setPageLoading(false);
                       }
@@ -1087,9 +1121,9 @@ const WalletPage: React.FC = () => {
                     {transactions.map((transaction) => (
                       <div
                         key={transaction.id}
-                        className="flex items-center justify-between p-4 rounded-lg bg-white/5 border border-white/10"
+                        className="flex flex-col gap-3 rounded-lg bg-white/5 border border-white/10 p-4 sm:flex-row sm:items-center sm:justify-between"
                       >
-                        <div className="flex items-center space-x-4">
+                        <div className="flex items-start gap-3 sm:items-center sm:gap-4">
                           {getTransactionIcon(transaction.type)}
                           <div>
                             <p className="text-white font-medium">{transaction.description}</p>
@@ -1101,13 +1135,13 @@ const WalletPage: React.FC = () => {
                             )}
                           </div>
                         </div>
-                        <div className="text-right">
+                        <div className="text-left sm:text-right">
                           <p className={`font-bold ${
                             transaction.amount > 0 ? 'text-green-400' : 'text-red-400'
                           }`}>
                             {transaction.amount > 0 ? '+' : ''}Tsh {Math.abs(transaction.amount).toLocaleString()}
                           </p>
-                          <div className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs ${getStatusColor(transaction.status)}`}>
+                          <div className={`mt-1 inline-flex items-center space-x-1 rounded-full px-2 py-1 text-xs ${getStatusColor(transaction.status)}`}>
                             {getStatusIcon(transaction.status)}
                             <span>{normalizeDisplayStatus(transaction.status)}</span>
                           </div>
@@ -1394,7 +1428,7 @@ const WalletPage: React.FC = () => {
                         </div>
                       )}
                     </div>
-                    <div className="flex gap-3 mt-4">
+                    <div className="flex flex-col gap-3 mt-4 sm:flex-row">
                       <Button
                         onClick={() => setShowPaymentConfirmation(true)}
                         className="flex-1 bg-purple-600 hover:bg-purple-700"
@@ -1565,6 +1599,42 @@ const WalletPage: React.FC = () => {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-white/70 mb-2">
+                      Withdraw From
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setWithdrawSource('deposit')}
+                        className={`rounded-lg border px-4 py-3 text-sm font-medium transition ${
+                          withdrawSource === 'deposit'
+                            ? 'bg-white/10 border-white/40 text-white'
+                            : 'bg-white/5 border-white/20 text-white/70 hover:bg-white/10'
+                        }`}
+                      >
+                        Deposit Balance
+                        <p className="mt-1 text-xs text-white/60">
+                          Tsh {depositBalance.toLocaleString()}
+                        </p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setWithdrawSource('revenue')}
+                        className={`rounded-lg border px-4 py-3 text-sm font-medium transition ${
+                          withdrawSource === 'revenue'
+                            ? 'bg-white/10 border-white/40 text-white'
+                            : 'bg-white/5 border-white/20 text-white/70 hover:bg-white/10'
+                        }`}
+                      >
+                        Revenue Balance
+                        <p className="mt-1 text-xs text-white/60">
+                          Tsh {revenueBalance.toLocaleString()}
+                        </p>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-white/70 mb-2">
                       Amount (Tsh)
                     </label>
                     <input
@@ -1574,10 +1644,10 @@ const WalletPage: React.FC = () => {
                       className="w-full p-3 rounded-lg bg-black/20 border border-white/10 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-purple-500"
                       placeholder="Enter amount"
                       min="5000"
-                      max={balance}
+                      max={availableWithdrawalBalance}
                     />
                     <p className="text-xs text-white/60 mt-1">
-                      Available balance: Tsh {balance.toLocaleString()} • Minimum: Tsh 5,000
+                      Available {withdrawSource} balance: Tsh {availableWithdrawalBalance.toLocaleString()} • Minimum: Tsh 5,000
                     </p>
                   </div>
                   
@@ -1630,7 +1700,7 @@ const WalletPage: React.FC = () => {
                       loading ||
                       !withdrawAmount ||
                       !withdrawPhoneNumber ||
-                      parseFloat(withdrawAmount) > balance ||
+                      parseFloat(withdrawAmount) > availableWithdrawalBalance ||
                       parseFloat(withdrawAmount) < 5000
                     }
                     className="w-full bg-linear-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"

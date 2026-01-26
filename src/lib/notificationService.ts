@@ -1,8 +1,7 @@
 import { getSession } from 'next-auth/react';
+import { getApiBaseUrl } from '@/lib/apiBase';
 
-const NOTIFICATION_SERVICE_URL = process.env.NEXT_PUBLIC_API_URL 
-  ? `${process.env.NEXT_PUBLIC_API_URL}/notification` 
-  : 'http://localhost:8081/api/notification';
+const NOTIFICATION_SERVICE_URL = `${getApiBaseUrl()}/notification`;
 
 export interface Notification {
   notificationId: string;

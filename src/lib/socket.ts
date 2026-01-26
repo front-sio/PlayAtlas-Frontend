@@ -1,37 +1,25 @@
-const SOCKET_IO_PATH = '/socket.io';
+const SOCKET_IO_PATH = (process.env.SOCKET_IO_PATH || '/socket.io').trim();
 
 type SocketTarget = {
   url: string;
   path: string;
 };
 
-export function normalizeSocketTarget(rawUrl: string): SocketTarget {
-  const trimmed = (rawUrl || '').trim();
-  if (!trimmed) {
+const trimUrl = (value: string) =>
+  value
+    .replace(/\/socket\.io.*$/i, '')
+    .replace(/\/api\/?$/i, '')
+    .replace(/\/+$/, '');
+
+export function normalizeSocketTarget(rawUrl?: string): SocketTarget {
+  const baseUrl = (rawUrl ?? process.env.NEXT_PUBLIC_ADMIN_WS_URL ?? '').trim();
+  if (!baseUrl) {
     return { url: '', path: SOCKET_IO_PATH };
   }
 
-  let withoutTrailing = trimmed.replace(/\/$/, '');
-  
-  // Convert HTTP/WS protocols to secure versions for production
-  if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
-    withoutTrailing = withoutTrailing.replace(/^http:/, 'https:').replace(/^ws:/, 'wss:');
-  }
-  
-  const socketIndex = withoutTrailing.indexOf('/socket.io');
-  let url = withoutTrailing;
-  let path = SOCKET_IO_PATH;
-
-  if (socketIndex !== -1) {
-    url = withoutTrailing.slice(0, socketIndex);
-    path = withoutTrailing.slice(socketIndex);
-  }
-
-  if (!path.startsWith('/socket.io')) {
-    path = SOCKET_IO_PATH;
-  }
-
-  console.log('[Socket] Normalized target:', { original: rawUrl, normalized: url, path });
-
-  return { url, path };
+  const normalizedUrl = trimUrl(baseUrl);
+  return {
+    url: normalizedUrl,
+    path: SOCKET_IO_PATH,
+  };
 }

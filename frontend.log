@@ -1,0 +1,38 @@
+
+> playatlas-frontend@1.0.0 dev
+> next dev -p 3000 2>&1 | tee dev.log
+
+ ⚠ You are using a non-standard "NODE_ENV" value in your environment. This creates inconsistencies in the project and is strongly advised against. Read more: https://nextjs.org/docs/messages/non-standard-node-env
+   ▲ Next.js 15.5.9
+   - Local:        http://localhost:3000
+   - Network:       http://localhost:3000
+   - Environments: .env.local
+
+ ✓ Starting...
+   Reload env: .env.production
+ ✓ Ready in 2.3s
+ ○ Compiling /api/auth/[...nextauth] ...
+ ✓ Compiled /api/auth/[...nextauth] in 1277ms (521 modules)
+[next-auth][warn][DEBUG_ENABLED] 
+https://next-auth.js.org/warnings#debug_enabled
+ GET /api/auth/session 200 in 2211ms
+ ○ Compiling /tournaments ...
+ ✓ Compiled /tournaments in 2.8s (1256 modules)
+[next-auth][warn][DEBUG_ENABLED] 
+https://next-auth.js.org/warnings#debug_enabled
+ GET /api/auth/session 200 in 3071ms
+[Socket] Normalized target: {
+  original: ' http://localhost:8081',
+  normalized: ' http://localhost:8081',
+  path: '/socket.io'
+}
+ GET /tournaments 200 in 3848ms
+ POST /api/auth/_log 200 in 59ms
+ POST /api/auth/_log 200 in 194ms
+ ⚠ Cross origin request detected from 10.225.96.93 to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure "allowedDevOrigins" in next.config to allow this.
+Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins
+ GET /api/auth/session 200 in 46ms
+ GET /api/auth/session 200 in 29ms
+ GET /api/auth/session 200 in 26ms
+ GET /api/auth/session 200 in 39ms
+ GET /api/auth/session 200 in 20ms

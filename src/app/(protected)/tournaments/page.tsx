@@ -8,11 +8,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Trophy, Users, Wallet, Play, Clock, Filter, Search, Star, Eye, ArrowRight } from 'lucide-react';
-import { tournamentApi, walletApi } from '@/lib/apiService';
+import { agentApi, playerApi, tournamentApi, walletApi } from '@/lib/apiService';
+import { getApiBaseUrl } from '@/lib/apiBase';
 import { useSession } from 'next-auth/react';
 import { PageLoader } from '@/components/ui/page-loader';
 import { io, Socket } from 'socket.io-client';
-import { normalizeSocketTarget } from '../../../lib/socket';
+import { normalizeSocketTarget } from '@/lib/socket';
 
 interface Tournament {
   tournamentId: string;
@@ -47,6 +48,17 @@ interface Season {
   hasJoined?: boolean;
 }
 
+const FIXTURE_DELAY_MINUTES = 4;
+
+const isJoiningClosed = (season: Season) => {
+  if (season.joiningClosed) return true;
+  if (!season.startTime) return false;
+  const startTime = new Date(season.startTime);
+  if (Number.isNaN(startTime.getTime())) return false;
+  const joiningCloseAt = new Date(startTime.getTime() - FIXTURE_DELAY_MINUTES * 60 * 1000);
+  return Date.now() >= joiningCloseAt.getTime();
+};
+
 const TournamentsPage: React.FC = () => {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [filteredTournaments, setFilteredTournaments] = useState<Tournament[]>([]);
@@ -67,12 +79,19 @@ const TournamentsPage: React.FC = () => {
   }>({ open: false, title: '', message: '', type: 'info' });
   const [mounted, setMounted] = useState(false);
   const { data: session } = useSession();
+  const playerId = (session?.user as any)?.userId as string | undefined;
+  const accessToken = (session as any)?.accessToken as string | undefined;
+  const clubIdFromSession = (session?.user as any)?.clubId as string | undefined;
+  const role = (session?.user as any)?.role as string | undefined;
   const socketRef = useRef<Socket | null>(null);
   const [socketConnected, setSocketConnected] = useState(false);
+  const [playerClubId, setPlayerClubId] = useState<string | null>(null);
 
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
-  const socketUrl = useMemo(() => apiBase.replace(/\/api\/?$/, ''), [apiBase]);
-  const socketTarget = useMemo(() => normalizeSocketTarget(socketUrl), [socketUrl]);
+  const apiBase = getApiBaseUrl();
+  const socketTarget = useMemo(
+    () => normalizeSocketTarget(process.env.NEXT_PUBLIC_ADMIN_WS_URL || apiBase),
+    [apiBase]
+  );
 
   useEffect(() => {
     setMounted(true);
@@ -81,15 +100,51 @@ const TournamentsPage: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        const normalizedRole = (role || '').toLowerCase();
+        const isAgent = normalizedRole === 'agent';
+        let clubId = clubIdFromSession || playerClubId || null;
+
+        if (!clubId && isAgent && accessToken) {
+          try {
+            const profileRes = await agentApi.getProfile(accessToken);
+            clubId = profileRes?.data?.agent?.clubId || null;
+          } catch (err) {
+            console.error('Failed to fetch agent profile:', err);
+          }
+        }
+
+        if (!clubId && !isAgent && playerId) {
+          try {
+            const playerStats = await playerApi.getStats(playerId, accessToken);
+            clubId = (playerStats?.data as any)?.clubId || null;
+            setPlayerClubId(clubId);
+          } catch (err: any) {
+            if (err?.status === 404 && (session?.user as any)?.username) {
+              await playerApi.createOrUpdatePlayer({
+                playerId,
+                username: (session?.user as any)?.username
+              });
+              const retry = await playerApi.getStats(playerId, accessToken);
+              clubId = (retry?.data as any)?.clubId || null;
+              setPlayerClubId(clubId);
+            } else if (err?.status !== 404) {
+              throw err;
+            }
+          }
+        }
+
         // Fetch tournaments (public)
-        const tournamentsData = await tournamentApi.getTournaments(1, 50, 'active');
-        setTournaments(tournamentsData.data || []);
+        if (clubId) {
+          const tournamentsData = await tournamentApi.getTournaments(1, 50, 'active', clubId);
+          setTournaments(tournamentsData.data || []);
+        } else {
+          setTournaments([]);
+        }
 
         // Fetch wallet (requires auth)
-        const token = (session as any)?.accessToken as string | undefined;
-        if (token) {
+        if (accessToken) {
           try {
-            const walletData = await walletApi.getWallet(token);
+            const walletData = await walletApi.getWallet(accessToken);
             setWallet(walletData.data);
           } catch (error) {
             console.error('Failed to fetch wallet:', error);
@@ -105,7 +160,7 @@ const TournamentsPage: React.FC = () => {
     };
 
     fetchData();
-  }, [session]);
+  }, [accessToken, clubIdFromSession, playerClubId, playerId, role, session]);
 
   useEffect(() => {
     let filtered = tournaments;
@@ -183,7 +238,8 @@ const TournamentsPage: React.FC = () => {
     if (!mounted) return;
     const token = (session as any)?.accessToken as string | undefined;
     if (!token) return;
-    const s = io(socketTarget.url, {
+    const connectionUrl = socketTarget.url || undefined;
+    const s = io(connectionUrl, {
       path: socketTarget.path,
       auth: { token },
       transports: ['websocket'],
@@ -227,7 +283,7 @@ const TournamentsPage: React.FC = () => {
       s.disconnect();
       socketRef.current = null;
     };
-  }, [mounted, socketTarget, session, tournaments]);
+  }, [mounted, session, tournaments, socketTarget.url, socketTarget.path]);
 
   useEffect(() => {
     if (!socketConnected || !socketRef.current) return;
@@ -238,7 +294,7 @@ const TournamentsPage: React.FC = () => {
 
   const getJoinDisabledReason = (tournament: Tournament, season: Season) => {
     if (season.status !== 'upcoming') return 'Season not open';
-    if (season.joiningClosed) return 'Joining closed';
+    if (isJoiningClosed(season)) return 'Joining closed';
     if (season.hasJoined) return 'Already joined';
     if (typeof tournament.maxPlayers === 'number' && typeof season.playerCount === 'number') {
       if (season.playerCount >= tournament.maxPlayers) return 'Season full';
@@ -332,7 +388,9 @@ const TournamentsPage: React.FC = () => {
     return <PageLoader label="Loading tournaments…" />;
   }
 
-  const openSeasons = Object.values(seasonsByTournament).flat().filter((season) => season.status === 'upcoming' && !season.joiningClosed);
+  const openSeasons = Object.values(seasonsByTournament)
+    .flat()
+    .filter((season) => season.status === 'upcoming' && !isJoiningClosed(season));
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(20,184,166,0.15),_transparent_55%),radial-gradient(circle_at_30%_40%,_rgba(234,179,8,0.12),_transparent_55%),linear-gradient(180deg,_#0b0f1a_0%,_#070a12_45%,_#06080e_100%)] text-white">
@@ -474,7 +532,7 @@ const TournamentsPage: React.FC = () => {
               {seasonsByTournament[tournament.tournamentId] && (
                 <div className="mt-4 space-y-3">
                   {seasonsByTournament[tournament.tournamentId]
-                    .filter((s) => s.status === 'upcoming' && !s.joiningClosed)
+                    .filter((s) => s.status === 'upcoming')
                     .slice(0, 2)
                     .map((season) => {
                       const disabledReason = getJoinDisabledReason(tournament, season);

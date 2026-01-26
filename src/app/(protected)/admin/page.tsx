@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { AccessDenied } from '@/components/admin/AccessDenied';
 import { canAccessAdmin, canViewTournaments, canViewWallets, canViewFinancialReports, canManageUsers } from '@/lib/permissions';
 import { useSocket } from '@/hooks/useSocket';
@@ -15,7 +16,8 @@ import {
   TrendingUp,
   Gamepad2,
   Activity,
-  AlertCircle
+  AlertCircle,
+  Download
 } from 'lucide-react';
 
 export default function AdminPage() {
@@ -35,6 +37,10 @@ export default function AdminPage() {
     pendingCashouts: 0,
     activeSessions: 0,
     platformRevenue: 0,
+    platformWalletBalance: 0,
+    systemWalletBalance: 0,
+    aiWalletBalance: 0,
+    generalRevenue: 0,
     transactionFees: 0,
     walletCount: 0,
     totalBalance: 0,
@@ -106,8 +112,8 @@ export default function AdminPage() {
       description: 'Financial reports',
       icon: TrendingUp,
       color: 'from-red-500 to-orange-600',
-      stat: `TSH ${stats.platformRevenue.toLocaleString()}`,
-      statLabel: 'Platform'
+      stat: `TSH ${stats.generalRevenue.toLocaleString()}`,
+      statLabel: 'General'
     },
   ];
 
@@ -146,6 +152,10 @@ export default function AdminPage() {
         pendingCashouts: payments.pendingCashouts ?? data.pendingCashouts ?? prev.pendingCashouts,
         activeSessions: data.activeSessions ?? prev.activeSessions,
         platformRevenue: financial.platformRevenue ?? prev.platformRevenue,
+        platformWalletBalance: financial.platformWalletBalance ?? prev.platformWalletBalance,
+        systemWalletBalance: financial.systemWalletBalance ?? prev.systemWalletBalance,
+        aiWalletBalance: financial.aiWalletBalance ?? prev.aiWalletBalance,
+        generalRevenue: financial.generalRevenue ?? prev.generalRevenue,
         transactionFees: payments.transactionFees ?? financial.transactionFees ?? prev.transactionFees,
         walletCount: financial.walletCount ?? prev.walletCount,
         totalBalance: financial.totalBalance ?? prev.totalBalance
@@ -217,7 +227,7 @@ export default function AdminPage() {
             <div className="text-2xl font-bold text-slate-900">
               {statsLoading ? '—' : stats.totalUsers}
             </div>
-            <p className="mt-1 text-xs text-slate-500">Registered players</p>
+            <p className="mt-1 text-xs text-slate-500">Registered users</p>
           </CardContent>
         </Card>
 
@@ -235,7 +245,18 @@ export default function AdminPage() {
             <p className="mt-1 text-xs text-slate-500">Active accounts</p>
           </CardContent>
         </Card>
-
+          <Card>
+          <CardHeader>
+            <div className='flex items-center justify-between'>
+              <CardTitle className='text-sm font-medium text-green-500'>Total Players</CardTitle>
+              <Users className='h-4 w-4 text-green-900' />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className='text-2xl font-bold text-slate-900'>0</div>
+            <p className='mt-1 text-xs text-slate-500'>Registered now</p>
+          </CardContent>
+        </Card>
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
@@ -250,7 +271,44 @@ export default function AdminPage() {
             <p className="mt-1 text-xs text-slate-500">Running competitions</p>
           </CardContent>
         </Card>
-
+    <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-slate-500">Tournament Players</CardTitle>
+              <Users className="h-4 w-4 text-slate-400" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-slate-900">
+              {statsLoading ? '—' : stats.totalPlayers}
+            </div>
+            <p className="mt-1 text-xs text-slate-500">Active seasons {stats.activeSeasons}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <div className='flex items-center justify-between'>
+              <CardTitle className='text-sm font-medium text-green-500'>Running Seasons</CardTitle>
+              <Gamepad2 className='h-4 w-4 text-slate-900' />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className='text-2xl font-bold text-slate-900'>0</div>
+            <p className='mt-1 text-xs text-slate-500'>Online now</p>
+          </CardContent>
+        </Card>
+          <Card>
+          <CardHeader>
+            <div className='flex items-center justify-between'>
+              <CardTitle className='text-sm font-medium text-green-500'>Playing Players</CardTitle>
+              <Gamepad2 className='h-4 w-4 text-slate-900' />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className='text-2xl font-bold text-slate-900'>0</div>
+            <p className='mt-1 text-xs text-slate-500'>Playing now</p>
+          </CardContent>
+        </Card>
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
@@ -294,46 +352,69 @@ export default function AdminPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-900">
-              {statsLoading ? '—' : `TSH ${stats.platformRevenue.toLocaleString()}`}
+              {statsLoading ? '—' : `TSH ${stats.platformWalletBalance.toLocaleString()}`}
             </div>
-            <p className="mt-1 text-xs text-slate-500">System + transaction fees</p>
+            <p className="mt-1 text-xs text-slate-500">Platform fees + transaction fees</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-slate-500">Wallet Balance</CardTitle>
+              <CardTitle className="text-sm font-medium text-slate-500">System Wallet</CardTitle>
               <Wallet className="h-4 w-4 text-slate-400" />
             </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-900">
-              {statsLoading ? '—' : `TSH ${stats.totalBalance.toLocaleString()}`}
+              {statsLoading ? '—' : `TSH ${stats.systemWalletBalance.toLocaleString()}`}
             </div>
-            <p className="mt-1 text-xs text-slate-500">{stats.walletCount} wallets</p>
+            <p className="mt-1 text-xs text-slate-500">Tournament entry fees</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-slate-500">Tournament Players</CardTitle>
-              <Users className="h-4 w-4 text-slate-400" />
+              <CardTitle className="text-sm font-medium text-slate-500">AI Wallet Revenue</CardTitle>
+              <TrendingUp className="h-4 w-4 text-slate-400" />
             </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-900">
-              {statsLoading ? '—' : stats.totalPlayers}
+              {statsLoading ? '—' : `TSH ${stats.aiWalletBalance.toLocaleString()}`}
             </div>
-            <p className="mt-1 text-xs text-slate-500">Active seasons {stats.activeSeasons}</p>
+            <p className="mt-1 text-xs text-slate-500">AI winnings balance</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-slate-500">General Revenue</CardTitle>
+              <TrendingUp className="h-4 w-4 text-slate-400" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-slate-900">
+              {statsLoading ? '—' : `TSH ${stats.generalRevenue.toLocaleString()}`}
+            </div>
+            <p className="mt-1 text-xs text-slate-500">Platform + system + AI</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Quick Access Links */}
       <div>
-        <h3 className="mb-4 text-lg font-semibold text-slate-900">Quick Access</h3>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-lg font-semibold text-slate-900">Quick Access</h3>
+          <Button asChild>
+            <a href="/play-atlas.apk" download>
+              <Download className="h-4 w-4" />
+              Download APK
+            </a>
+          </Button>
+        </div>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredQuickLinks.map((link) => {
             const Icon = link.icon;

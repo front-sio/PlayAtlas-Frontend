@@ -7,7 +7,7 @@ export function ClientShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAuth = pathname?.startsWith("/auth");
   const isAdmin = pathname?.startsWith("/admin");
-  const isGameLobby = pathname === "/game";
+  const isGameLobby = pathname === "/game" || pathname === "/game/pc";
   const isPlayMode =
     pathname?.startsWith('/game/practice') ||
     pathname?.startsWith('/game/match');

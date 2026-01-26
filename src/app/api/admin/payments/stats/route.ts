@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/authOptions';
+import { getApiBaseUrl } from '@/lib/apiBase';
 
 const ADMIN_ROLES = [
   'admin',
@@ -17,16 +18,7 @@ const ADMIN_ROLES = [
 
 async function getAdminStats(token: string, retryCount = 0): Promise<{ success: boolean; data: { pendingDeposits: number; pendingCashouts: number } }> {
   try {
-    // Try multiple possible API URLs (gateway port, direct service port)
-    const possibleUrls = [
-      process.env.NEXT_PUBLIC_API_URL,
-      'http://localhost:8080/api',
-      'http://localhost:8080'
-    ].filter(Boolean);
-    
-    // Remove protocol if it's in the URL and add it back to avoid duplicates
-    const cleanUrl = possibleUrls[0];
-    const API_URL = cleanUrl || 'http://localhost:8080/api';
+    const API_URL = getApiBaseUrl();
     
     const response = await fetch(`${API_URL}/payment/admin/stats`, {
       headers: {

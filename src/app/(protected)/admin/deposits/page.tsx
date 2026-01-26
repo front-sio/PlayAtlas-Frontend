@@ -28,6 +28,7 @@ interface Deposit {
   approvedBy?: string;
   approvedAt?: string;
   externalReference?: string;
+  providerTid?: string;
   transactionMessage?: string;
   failureReason?: string;
   metadata?: any;
@@ -59,6 +60,10 @@ export default function AdminDepositsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [tidSearch, setTidSearch] = useState('');
+  const [tidError, setTidError] = useState('');
+  const [tidLoading, setTidLoading] = useState(false);
+  const [activeTid, setActiveTid] = useState<string | null>(null);
   const [processing, setProcessing] = useState<string | null>(null);
   const [selectedDeposit, setSelectedDeposit] = useState<Deposit | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -89,7 +94,7 @@ export default function AdminDepositsPage() {
     if (!search.trim()) return deposits;
     const term = search.toLowerCase();
     return deposits.filter((deposit) =>
-      `${deposit.referenceNumber} ${deposit.provider} ${deposit.phoneNumber || ''} ${deposit.userId || ''}`
+      `${deposit.referenceNumber} ${deposit.provider} ${deposit.providerTid || ''} ${deposit.phoneNumber || ''} ${deposit.userId || ''}`
         .toLowerCase()
         .includes(term)
     );
@@ -112,7 +117,10 @@ export default function AdminDepositsPage() {
     if (!token) return;
     try {
       setProcessing(depositId);
-      const result = await paymentApi.approveDeposit(token, depositId);
+      const tidForApproval = activeTid || selectedDeposit?.providerTid || null;
+      const result = tidForApproval
+        ? await paymentApi.approveDepositByTid(token, tidForApproval, selectedDeposit?.transactionMessage)
+        : await paymentApi.approveDeposit(token, depositId);
       if (result.success) {
         // Find the deposit to get user info
         const deposit = deposits.find(d => d.depositId === depositId);
@@ -141,6 +149,35 @@ export default function AdminDepositsPage() {
       setError(err instanceof Error ? err.message : 'Failed to approve deposit');
     } finally {
       setProcessing(null);
+    }
+  };
+
+  const handleFindByTid = async () => {
+    if (!token || !tidSearch.trim()) return;
+    try {
+      setTidLoading(true);
+      setTidError('');
+      const result = await paymentApi.getDepositByTid(token, tidSearch.trim());
+      if (result.success && result.data) {
+        const payload = (result.data as any)?.data || result.data;
+        if (payload?.depositId) {
+          setSelectedDeposit(payload);
+          setDetailsOpen(true);
+          setActiveTid(tidSearch.trim().toUpperCase());
+          setDeposits((prev) => {
+            if (prev.some((d) => d.depositId === payload.depositId)) return prev;
+            return [payload, ...prev];
+          });
+        } else {
+          setTidError('Deposit not found for provided TID');
+        }
+      } else {
+        setTidError(result.error || 'Deposit not found for provided TID');
+      }
+    } catch (err) {
+      setTidError(err instanceof Error ? err.message : 'Failed to find deposit by TID');
+    } finally {
+      setTidLoading(false);
     }
   };
 
@@ -228,6 +265,7 @@ export default function AdminDepositsPage() {
           size="sm"
           onClick={() => {
             setSelectedDeposit(item);
+            setActiveTid(null);
             setDetailsOpen(true);
           }}
         >
@@ -246,14 +284,36 @@ export default function AdminDepositsPage() {
       <Card>
         <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <CardTitle>Deposits</CardTitle>
-          <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search deposits..."
-            className="md:max-w-xs"
-          />
+          <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center">
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search deposits..."
+              className="md:max-w-xs"
+            />
+            <div className="flex flex-1 gap-2 md:flex-none">
+              <Input
+                value={tidSearch}
+                onChange={(event) => setTidSearch(event.target.value)}
+                placeholder="Find by TID..."
+                className="min-w-[12rem]"
+              />
+              <Button
+                onClick={handleFindByTid}
+                disabled={!tidSearch.trim() || tidLoading}
+                variant="secondary"
+              >
+                {tidLoading ? 'Searching...' : 'Find'}
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
+          {tidError && (
+            <div className="mb-4 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+              {tidError}
+            </div>
+          )}
           {error && (
             <div className="mb-4 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
               {error}
@@ -320,6 +380,12 @@ export default function AdminDepositsPage() {
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Provider Ref</span>
                   <span>{selectedDeposit.externalReference}</span>
+                </div>
+              )}
+              {selectedDeposit.providerTid && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Provider TID</span>
+                  <span>{selectedDeposit.providerTid}</span>
                 </div>
               )}
               {selectedDeposit.transactionMessage && (

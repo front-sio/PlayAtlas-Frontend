@@ -236,9 +236,16 @@ docker-compose down                # Stop all services
 
 #### Frontend (.env)
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:3001
-NEXT_PUBLIC_WS_URL=ws://localhost:3001
-NEXT_PUBLIC_ENVIRONMENT=development
+NEXTAUTH_SECRET=<your-nextauth-secret>
+NEXTAUTH_URL=https://game.stebofarm.co.tz
+NEXTAUTH_BASE_URL=https://game.stebofarm.co.tz
+
+NEXT_PUBLIC_API_URL=https://api.stebofarm.co.tz/api
+NEXT_PUBLIC_ADMIN_WS_URL=https://api.stebofarm.co.tz
+NEXT_PUBLIC_GAME_SERVICE_URL=https://api.stebofarm.co.tz
+NEXT_PUBLIC_MATCHMAKING_SERVICE_URL=https://api.stebofarm.co.tz
+NEXT_PUBLIC_GAME_SOCKET_PATH=/socket.io
+NEXT_PUBLIC_MATCHMAKING_SOCKET_PATH=/socket.io
 ```
 
 #### Backend (.env)

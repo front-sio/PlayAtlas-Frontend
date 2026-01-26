@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 
@@ -10,10 +10,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { generateColor, getInitials } from '@/lib/avatarUtils';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-import { Trophy, User, Calendar, Target, Award, Settings, Camera, Save, Shield, Zap, Bell } from 'lucide-react';
+import { Trophy, User, Calendar, Target, Award, Settings, Camera, Save, Shield } from 'lucide-react';
 import { authApi, playerApi, tournamentApi, matchmakingApi } from '@/lib/apiService';
 import { PageLoader } from '@/components/ui/page-loader';
 import { NotificationPreferences } from '@/components/NotificationPreferences';
@@ -80,6 +81,15 @@ interface SeasonSummary {
   };
 }
 
+interface ClubTournament {
+  tournamentId: string;
+  name: string;
+  status?: string;
+  startTime?: string | null;
+  endTime?: string | null;
+  entryFee?: number;
+}
+
 interface MatchSummary {
   matchId: string;
   tournamentId: string;
@@ -94,6 +104,7 @@ interface MatchSummary {
 const ProfilePage: React.FC = () => {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
 
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
@@ -101,20 +112,11 @@ const ProfilePage: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // Keep userId around for password reset
-  const [authUserId, setAuthUserId] = useState<string>('');
-
-  // OTP reset flow state
-  const [resetStep, setResetStep] = useState<'idle' | 'codeSent'>('idle');
-
   const [formData, setFormData] = useState({
     displayName: '',
     email: '',
     phone: '',
-    // NOTE: backend doesn’t support changing password with current password
-    // we keep the field only if you want UI, but it won't be used
     currentPassword: '',
-    resetCode: '', // ✅ added
     newPassword: '',
     confirmPassword: '',
   });
@@ -128,6 +130,7 @@ const ProfilePage: React.FC = () => {
   const [matchHistory, setMatchHistory] = useState<MatchSummary[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState('');
+  const [clubTournaments, setClubTournaments] = useState<ClubTournament[]>([]);
 
   useEffect(() => {
     if (status === 'authenticated') fetchUserData();
@@ -148,6 +151,55 @@ const ProfilePage: React.FC = () => {
     });
   };
 
+  const handleAvatarSelect = () => {
+    avatarInputRef.current?.click();
+  };
+
+  const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setMessage('Please select an image file.');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setMessage('Image must be smaller than 2MB.');
+      return;
+    }
+
+    const token = (session as any)?.accessToken as string | undefined;
+    if (!token) {
+      setMessage('Please login to upload an avatar.');
+      return;
+    }
+
+    setIsLoading(true);
+    setMessage('');
+
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsDataURL(file);
+      });
+
+      const response = await authApi.updateAvatar(token, dataUrl);
+      const updated = response?.data;
+
+      setProfile((prev) => (prev ? { ...prev, avatar: updated?.avatarUrl || dataUrl } : prev));
+      setMessage('Avatar updated successfully!');
+    } catch (e) {
+      logErr('❌ Avatar upload error', e);
+      setMessage('Failed to update avatar. Please try again.');
+    } finally {
+      setIsLoading(false);
+      if (avatarInputRef.current) {
+        avatarInputRef.current.value = '';
+      }
+    }
+  };
+
   const fetchUserData = async () => {
     const token = (session as any)?.accessToken as string | undefined;
 
@@ -165,30 +217,35 @@ const ProfilePage: React.FC = () => {
       const meRes = await authApi.getCurrentUser(token);
       const me = meRes?.data || {};
       const userId = String(me.userId || '');
-      setAuthUserId(userId);
 
       // In this system, playerId === auth userId (see player-service ensurePlayerProfile).
       const playerId = userId;
 
+      const isAgent = String(me.role || '').toLowerCase() === 'agent';
+
       // 2) create or update player (best-effort; profile can still render without it)
-      try {
-        await playerApi.createOrUpdatePlayer({
-          // player-service expects { playerId, username, agentUserId? }
-          playerId,
-          username: me.username,
-        });
-      } catch (e) {
-        logErr('⚠️ Failed to ensure player profile', e);
+      if (!isAgent) {
+        try {
+          await playerApi.createOrUpdatePlayer({
+            // player-service expects { playerId, username, agentUserId? }
+            playerId,
+            username: me.username,
+          });
+        } catch (e) {
+          logErr('⚠️ Failed to ensure player profile', e);
+        }
       }
 
       // 3) stats (best-effort; if it fails we still show basic profile info)
       let stats: any = {};
-      try {
-        const statsRes = await playerApi.getStats(String(playerId));
-        stats = statsRes?.data || {};
-      } catch (e) {
-        logErr('⚠️ Failed to load player stats', e);
-        stats = {};
+      if (!isAgent) {
+        try {
+          const statsRes = await playerApi.getStats(String(playerId));
+          stats = statsRes?.data || {};
+        } catch (e) {
+          logErr('⚠️ Failed to load player stats', e);
+          stats = {};
+        }
       }
 
       const ratingPoints = Number(stats.rankingPoints || 0);
@@ -199,7 +256,7 @@ const ProfilePage: React.FC = () => {
         username: me.username || '',
         email: me.email || '',
         phone: me.phoneNumber || '',
-        avatar: '',
+        avatar: me.avatarUrl || '',
 
         level: Math.floor(ratingPoints / 100) + 1,
         experience: ratingPoints % 100,
@@ -229,6 +286,7 @@ const ProfilePage: React.FC = () => {
       };
 
       setProfile(combined);
+      setClubTournaments(Array.isArray(stats.clubTournaments) ? stats.clubTournaments : []);
       setFormData((prev) => ({
         ...prev,
         displayName: combined.displayName,
@@ -314,40 +372,19 @@ const ProfilePage: React.FC = () => {
     }
   };
 
-  // ✅ Step 1: send reset code
-  const handleSendResetCode = async () => {
-    setIsLoading(true);
-    setMessage('');
-
-    try {
-      if (!formData.email) {
-        setMessage('Email is missing. Please reload profile.');
-        return;
-      }
-
-      await authApi.forgotPassword(formData.email);
-      setResetStep('codeSent');
-      setMessage(`Reset code sent to ${formData.email}`);
-    } catch (e) {
-      logErr('❌ Forgot password error', e);
-      setMessage('Failed to send reset code. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // ✅ Step 2: reset password using userId + code + newPassword
   const handlePasswordChange = async () => {
     if (formData.newPassword !== formData.confirmPassword) {
       setMessage('Passwords do not match');
       return;
     }
-    if (!formData.resetCode) {
-      setMessage('Enter the reset code from your email');
+    if (!formData.currentPassword) {
+      setMessage('Current password is required');
       return;
     }
-    if (!authUserId) {
-      setMessage('User ID missing. Please reload profile.');
+
+    const token = (session as any)?.accessToken as string | undefined;
+    if (!token) {
+      setMessage('Please login to change your password');
       return;
     }
 
@@ -355,24 +392,21 @@ const ProfilePage: React.FC = () => {
     setMessage('');
 
     try {
-      await authApi.resetPassword({
-        userId: authUserId, // ✅ REQUIRED by backend
-        code: formData.resetCode, // ✅ real OTP code
-        newPassword: formData.newPassword,
+      await authApi.changePassword(token, {
+        currentPassword: formData.currentPassword,
+        newPassword: formData.newPassword
       });
 
-      setMessage('Password reset successfully!');
+      setMessage('Password changed successfully!');
       setFormData((prev) => ({
         ...prev,
         currentPassword: '',
-        resetCode: '',
         newPassword: '',
         confirmPassword: '',
       }));
-      setResetStep('idle');
     } catch (e) {
-      logErr('❌ Reset password error', e);
-      setMessage('Failed to reset password. Check code and try again.');
+      logErr('❌ Change password error', e);
+      setMessage('Failed to change password. Check your current password and try again.');
     } finally {
       setIsLoading(false);
     }
@@ -383,14 +417,14 @@ const ProfilePage: React.FC = () => {
   if (error || !profile) {
     return (
       <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.12),_transparent_55%),radial-gradient(circle_at_20%_30%,_rgba(59,130,246,0.12),_transparent_55%),linear-gradient(180deg,_#0a0f1b_0%,_#070a13_50%,_#06080f_100%)] text-white">
-        <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
+        <div className="mx-auto w-full max-w-3xl px-4 py-8 space-y-6">
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-emerald-200/80">Player Profile</p>
             <h1 className="mt-2 text-3xl font-bold text-white">Profile</h1>
             <p className="text-white/70">Manage your profile and track your progress</p>
           </div>
 
-          <Card className="bg-white/5 border-white/10">
+          <Card className="bg-white/5 border-white/10 rounded-3xl">
             <CardContent className="py-10 text-center space-y-3">
               <h2 className="text-xl font-semibold text-white">Couldn’t load your profile</h2>
               <p className="text-sm text-red-300">{error || 'Failed to load profile data'}</p>
@@ -419,198 +453,217 @@ const ProfilePage: React.FC = () => {
 
   const playedMatches = matchHistory.filter((match) => match.status === 'completed');
   const wonMatches = playedMatches.filter((match) => match.winnerId === profile.id);
+  const avatarInitials = getInitials(profile.displayName);
+  const avatarColor = generateColor(profile.displayName);
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.12),_transparent_55%),radial-gradient(circle_at_20%_30%,_rgba(59,130,246,0.12),_transparent_55%),linear-gradient(180deg,_#0a0f1b_0%,_#070a13_50%,_#06080f_100%)] text-white">
-      <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
-        <section className="rounded-3xl border border-white/10 bg-white/5 p-6 sm:p-8 backdrop-blur">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-emerald-200/80">Player Profile</p>
-              <h1 className="mt-2 text-3xl font-bold text-white">My Profile</h1>
-              <p className="text-white/70">Manage your profile and track your progress</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                onClick={() => router.push('/dashboard')}
-                className="border-white/20 text-white hover:bg-white/10 hover:text-white"
-              >
-                Back to Dashboard
-              </Button>
-              <Button
-                onClick={() => setActiveTab('settings')}
-                className="bg-emerald-500 hover:bg-emerald-600"
-              >
-                Edit Profile
-              </Button>
-            </div>
-          </div>
-        </section>
-
-        <div className="grid lg:grid-cols-3 gap-8">
-        {/* Left card */}
-        <div className="lg:col-span-1">
-          <Card className="bg-white/5 border-white/10 rounded-3xl">
-            <CardContent className="p-6 space-y-5">
-              <div className="text-center">
-                <div className="relative inline-block">
-                  <Avatar className="w-24 h-24 mx-auto mb-4 border border-white/10">
-                    <AvatarImage src={profile.avatar} alt={profile.displayName} />
-                    <AvatarFallback className="text-2xl bg-gradient-to-r from-emerald-500 to-cyan-500">
-                      {profile.displayName.charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <Button size="sm" className="absolute bottom-2 right-2 border-white/20 text-white/80 hover:bg-white/10">
-                    <Camera className="w-4 h-4" />
-                  </Button>
-                </div>
-
-                <h2 className="text-2xl font-bold text-white mb-2">{profile.displayName}</h2>
-                <p className="text-emerald-200 mb-4">@{profile.username}</p>
-
-                <div className="flex items-center justify-center space-x-2 mb-4">
-                  <Badge className="bg-emerald-600/20 text-emerald-200 border-emerald-500/30">Level {profile.level}</Badge>
-                  <Badge className="bg-sky-600/20 text-sky-200 border-sky-500/30">Rank #{profile.rank}</Badge>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-white/60">Rating</span>
-                    <span className="text-white font-semibold">{profile.rating}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-white/60">Win Rate</span>
-                    <span className="text-green-400 font-semibold">{profile.winRate}%</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-white/60">Total Matches</span>
-                    <span className="text-white font-semibold">{profile.totalMatches}</span>
-                  </div>
-                </div>
-
-                <div className="mt-4 pt-4 border-t border-white/10">
-                  <div className="flex justify-between text-sm mb-2">
-                    <span className="text-white/60">Experience</span>
-                    <span className="text-white">
-                      {profile.experience}/{profile.experienceToNext}
-                    </span>
-                  </div>
-                  <Progress value={(profile.experience / profile.experienceToNext) * 100} className="h-2 bg-white/10" />
-                </div>
+    <div className="min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.12),_transparent_55%),radial-gradient(circle_at_20%_30%,_rgba(59,130,246,0.12),_transparent_55%),linear-gradient(180deg,_#0a0f1b_0%,_#070a13_50%,_#06080f_100%)] text-white">
+      <div className="mx-auto w-full max-w-3xl px-4 pb-10 pt-6 space-y-5">
+        <Card className="bg-white/5 border-white/10 rounded-3xl">
+          <CardContent className="p-5 sm:p-6">
+            <div className="flex flex-col items-center text-center gap-3">
+              <div className="relative">
+                <Avatar className="w-24 h-24 border border-white/10">
+                  <AvatarImage src={profile.avatar} alt={profile.displayName} />
+                  <AvatarFallback className="text-2xl text-white" style={{ backgroundColor: avatarColor }}>
+                    {avatarInitials}
+                  </AvatarFallback>
+                </Avatar>
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleAvatarChange}
+                />
+                <Button
+                  size="icon"
+                  onClick={handleAvatarSelect}
+                  className="absolute -bottom-1 -right-1 h-9 w-9 border border-white/15 bg-black/60 text-white/80 hover:bg-white/10"
+                >
+                  <Camera className="h-4 w-4" />
+                </Button>
               </div>
-            </CardContent>
-          </Card>
-        </div>
 
-        {/* Right tabs */}
-        <div className="lg:col-span-2">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="flex h-12 w-full flex-nowrap items-center gap-2 overflow-x-auto rounded-lg border border-white/10 bg-white/5 px-4 mb-6 snap-x snap-mandatory no-scrollbar">
-              <TabsTrigger value="overview" className="min-w-[140px] flex-none snap-start text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white">
+              <div className="space-y-1">
+                <h1 className="text-2xl font-semibold text-white">{profile.displayName}</h1>
+                <p className="text-sm text-emerald-200/90">@{profile.username}</p>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <Badge className="bg-emerald-600/20 text-emerald-200 border-emerald-500/30">Level {profile.level}</Badge>
+                <Badge className="bg-sky-600/20 text-sky-200 border-sky-500/30">Rank #{profile.rank}</Badge>
+              </div>
+
+              <div className="w-full grid gap-2 pt-2">
+                <Button
+                  onClick={() => setActiveTab('settings')}
+                  className="w-full min-h-[44px] bg-emerald-500 hover:bg-emerald-600"
+                >
+                  Edit Profile
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => router.push('/dashboard')}
+                  className="w-full min-h-[44px] border-white/15 text-white/70 hover:bg-white/10"
+                >
+                  Back to Dashboard
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="flex min-h-[44px] w-full flex-nowrap items-center gap-1.5 overflow-x-auto rounded-lg border border-white/10 bg-white/5 px-2 mb-4 snap-x snap-mandatory no-scrollbar sm:gap-2 sm:px-3 sm:mb-6">
+              <TabsTrigger value="overview" className="min-w-[90px] min-h-[44px] flex-none snap-start px-3 py-2 text-[11px] text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white sm:min-w-[120px] sm:text-xs md:text-sm">
                 Overview
               </TabsTrigger>
-              <TabsTrigger value="achievements" className="min-w-[140px] flex-none snap-start text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white">
-                Achievements
+              <TabsTrigger value="achievements" className="min-w-[90px] min-h-[44px] flex-none snap-start px-3 py-2 text-[11px] text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white sm:min-w-[120px] sm:text-xs md:text-sm">
+                <span className="hidden sm:inline">Achievements</span>
+                <span className="sm:hidden">Awards</span>
               </TabsTrigger>
-              <TabsTrigger value="seasons" className="min-w-[140px] flex-none snap-start text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white">
+              <TabsTrigger value="seasons" className="min-w-[90px] min-h-[44px] flex-none snap-start px-3 py-2 text-[11px] text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white sm:min-w-[120px] sm:text-xs md:text-sm">
                 Seasons
               </TabsTrigger>
-              <TabsTrigger value="matches" className="min-w-[140px] flex-none snap-start text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white">
+              <TabsTrigger value="matches" className="min-w-[90px] min-h-[44px] flex-none snap-start px-3 py-2 text-[11px] text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white sm:min-w-[120px] sm:text-xs md:text-sm">
                 Matches
               </TabsTrigger>
-              <TabsTrigger value="settings" className="min-w-[140px] flex-none snap-start text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white">
+              <TabsTrigger value="settings" className="min-w-[90px] min-h-[44px] flex-none snap-start px-3 py-2 text-[11px] text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white sm:min-w-[120px] sm:text-xs md:text-sm">
                 Settings
               </TabsTrigger>
-              <TabsTrigger value="notifications" className="min-w-[160px] flex-none snap-start text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white">
-                Notifications
+              <TabsTrigger value="notifications" className="min-w-[90px] min-h-[44px] flex-none snap-start px-3 py-2 text-[11px] text-white/70 data-[state=active]:bg-white/10 data-[state=active]:text-white sm:min-w-[140px] sm:text-xs md:text-sm">
+                <span className="hidden sm:inline">Notifications</span>
+                <span className="sm:hidden">Notify</span>
               </TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview">
-              <div className="grid md:grid-cols-2 gap-6">
-                <Card className="bg-white/5 border-white/10">
-                  <CardHeader>
-                    <CardTitle className="text-white flex items-center">
-                      <Target className="w-5 h-5 mr-2" />
-                      Match Statistics
+              <div className="space-y-4">
+                <Card className="bg-white/5 border-white/10 rounded-3xl">
+                  <CardHeader className="space-y-1 p-4 sm:p-6">
+                    <CardTitle className="text-white flex items-center text-base">
+                      <Target className="w-4 h-4 mr-2" />
+                      Stats & Performance
                     </CardTitle>
+                    <CardDescription className="text-white/60 text-xs">
+                      Quick snapshot of your results and progress.
+                    </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-3 gap-4 text-center">
-                      <div>
-                        <p className="text-2xl font-bold text-green-400">{profile.wins}</p>
-                        <p className="text-sm text-white/60">Wins</p>
+                  <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                        <p className="text-[11px] text-white/60">Wins</p>
+                        <p className="text-xl font-semibold text-green-400">{profile.wins}</p>
                       </div>
-                      <div>
-                        <p className="text-2xl font-bold text-red-400">{profile.losses}</p>
-                        <p className="text-sm text-white/60">Losses</p>
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                        <p className="text-[11px] text-white/60">Losses</p>
+                        <p className="text-xl font-semibold text-red-400">{profile.losses}</p>
                       </div>
-                      <div>
-                        <p className="text-2xl font-bold text-yellow-400">{profile.draws}</p>
-                        <p className="text-sm text-white/60">Draws</p>
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                        <p className="text-[11px] text-white/60">Draws</p>
+                        <p className="text-xl font-semibold text-yellow-400">{profile.draws}</p>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                        <p className="text-[11px] text-white/60">Rating</p>
+                        <p className="text-xl font-semibold text-white">{profile.rating}</p>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                        <p className="text-[11px] text-white/60">Win Rate</p>
+                        <p className="text-xl font-semibold text-emerald-300">{profile.winRate}%</p>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                        <p className="text-[11px] text-white/60">Total Matches</p>
+                        <p className="text-xl font-semibold text-white">{profile.totalMatches}</p>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                        <p className="text-[11px] text-white/60">Best Break</p>
+                        <p className="text-xl font-semibold text-white">{profile.statistics.bestBreak}</p>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                        <p className="text-[11px] text-white/60">Highest Run</p>
+                        <p className="text-xl font-semibold text-white">{profile.statistics.highestRun}</p>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                        <p className="text-[11px] text-white/60">Tournaments Won</p>
+                        <p className="text-xl font-semibold text-white">{profile.statistics.tournamentsWon}</p>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                        <p className="text-[11px] text-white/60">Prize Money</p>
+                        <p className="text-xl font-semibold text-emerald-300">
+                          Tsh {profile.statistics.prizeMoney.toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="col-span-2 rounded-2xl border border-white/10 bg-white/5 p-3">
+                        <div className="flex items-center justify-between text-[11px] text-white/60">
+                          <span>Experience</span>
+                          <span className="text-white/80">
+                            {profile.experience}/{profile.experienceToNext}
+                          </span>
+                        </div>
+                        <Progress
+                          value={(profile.experience / profile.experienceToNext) * 100}
+                          className="mt-2 h-2 bg-white/10"
+                        />
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
-                <Card className="bg-white/5 border-white/10">
-                  <CardHeader>
-                    <CardTitle className="text-white flex items-center">
-                      <Zap className="w-5 h-5 mr-2" />
-                      Performance
+                <Card className="bg-white/5 border-white/10 rounded-3xl">
+                  <CardHeader className="space-y-1 p-4 sm:p-6">
+                    <CardTitle className="text-white flex items-center text-base">
+                      <Calendar className="w-4 h-4 mr-2" />
+                      Account & Club
                     </CardTitle>
+                    <CardDescription className="text-white/60 text-xs">
+                      Membership details and club tournaments.
+                    </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-white/60">Best Break</span>
-                        <span className="text-white">{profile.statistics.bestBreak}</span>
+                  <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0 space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                        <p className="text-[11px] text-white/60">Member Since</p>
+                        <p className="text-sm font-semibold text-white">
+                          {new Date(profile.joinedAt).toLocaleDateString()}
+                        </p>
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-white/60">Highest Run</span>
-                        <span className="text-white">{profile.statistics.highestRun}</span>
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                        <p className="text-[11px] text-white/60">Last Active</p>
+                        <p className="text-sm font-semibold text-white">
+                          {new Date(profile.lastActive).toLocaleDateString()}
+                        </p>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-white/5 border-white/10">
-                  <CardHeader>
-                    <CardTitle className="text-white flex items-center">
-                      <Trophy className="w-5 h-5 mr-2" />
-                      Tournament Success
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-white/60">Tournaments Won</span>
-                        <span className="text-white">{profile.statistics.tournamentsWon}</span>
+                    <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-semibold text-white">Club Tournaments</p>
+                        <Trophy className="h-4 w-4 text-emerald-300" />
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-white/60">Prize Money</span>
-                        <span className="text-green-400">Tsh {profile.statistics.prizeMoney.toLocaleString()}</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-white/5 border-white/10">
-                  <CardHeader>
-                    <CardTitle className="text-white flex items-center">
-                      <Calendar className="w-5 h-5 mr-2" />
-                      Account Info
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-white/60">Member Since</span>
-                        <span className="text-white">{new Date(profile.joinedAt).toLocaleDateString()}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-white/60">Last Active</span>
-                        <span className="text-white">{new Date(profile.lastActive).toLocaleDateString()}</span>
+                      <p className="text-xs text-white/60 mt-1">Tournaments from your registered club</p>
+                      <div className="mt-3 space-y-2">
+                        {clubTournaments.length === 0 ? (
+                          <p className="text-xs text-white/60">No tournaments available for your club yet.</p>
+                        ) : (
+                          clubTournaments.slice(0, 4).map((tournament) => (
+                            <div
+                              key={tournament.tournamentId}
+                              className="flex flex-col gap-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-sm font-semibold text-white">{tournament.name}</p>
+                                <Badge className="bg-white/10 text-white/80 border-white/10">
+                                  {tournament.status || 'scheduled'}
+                                </Badge>
+                              </div>
+                              {tournament.startTime && (
+                                <p className="text-[11px] text-white/60">
+                                  Starts {new Date(tournament.startTime).toLocaleDateString()}
+                                </p>
+                              )}
+                            </div>
+                          ))
+                        )}
                       </div>
                     </div>
                   </CardContent>
@@ -619,31 +672,31 @@ const ProfilePage: React.FC = () => {
             </TabsContent>
 
             <TabsContent value="achievements">
-              <Card className="bg-white/5 border-white/10">
-                <CardHeader>
-                  <CardTitle className="text-white flex items-center">
-                    <Award className="w-5 h-5 mr-2" />
+              <Card className="bg-white/5 border-white/10 rounded-3xl">
+                <CardHeader className="p-4 sm:p-6">
+                  <CardTitle className="text-white flex items-center text-base sm:text-lg">
+                    <Award className="w-4 h-4 mr-2 flex-shrink-0 sm:w-5 sm:h-5" />
                     Achievements
                   </CardTitle>
-                  <CardDescription className="text-white/60">Unlock achievements and earn rewards</CardDescription>
+                  <CardDescription className="text-white/60 text-xs sm:text-sm">Unlock achievements and earn rewards</CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
                   {profile.achievements.length === 0 ? (
-                    <div className="text-center text-white/60 py-10">No achievements yet.</div>
+                    <div className="text-center text-white/60 py-8 text-sm sm:py-10 sm:text-base">No achievements yet.</div>
                   ) : (
-                    <div className="grid md:grid-cols-2 gap-4">
+                    <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
                       {profile.achievements.map((a) => (
-                        <div key={a.id} className="flex items-center space-x-4 p-4 rounded-lg bg-white/5 border border-white/10">
-                          <div className="text-4xl">{a.icon}</div>
-                          <div className="flex-1">
-                            <div className="flex items-center justify-between">
-                              <h3 className="text-white font-medium">{a.name}</h3>
-                              <Badge className={getRarityColor(a.rarity)}>{a.rarity}</Badge>
+                        <div key={a.id} className="flex flex-row items-start gap-3 rounded-lg bg-white/5 border border-white/10 p-3 sm:p-4">
+                          <div className="text-2xl flex-shrink-0 sm:text-4xl">{a.icon}</div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-2 mb-1">
+                              <h3 className="text-white font-medium text-sm sm:text-base truncate">{a.name}</h3>
+                              <Badge className={`${getRarityColor(a.rarity)} text-[10px] px-1.5 py-0 flex-shrink-0 sm:text-xs sm:px-2`}>{a.rarity}</Badge>
                             </div>
-                            <p className="text-white/60 text-sm">{a.description}</p>
+                            <p className="text-white/60 text-xs line-clamp-2 sm:text-sm">{a.description}</p>
                             <div className="flex items-center justify-between mt-2">
-                              <span className="text-xs text-white/60">{new Date(a.unlockedAt).toLocaleDateString()}</span>
-                              <span className="text-sm text-cyan-400">+{a.points} pts</span>
+                              <span className="text-[10px] text-white/60 sm:text-xs">{new Date(a.unlockedAt).toLocaleDateString()}</span>
+                              <span className="text-xs text-cyan-400 font-medium sm:text-sm">+{a.points} pts</span>
                             </div>
                           </div>
                         </div>
@@ -655,41 +708,41 @@ const ProfilePage: React.FC = () => {
             </TabsContent>
 
             <TabsContent value="seasons">
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6">
                 {historyError && (
-                  <Card className="bg-red-500/10 border-red-500/20">
-                    <CardContent className="py-4 text-sm text-red-200">{historyError}</CardContent>
+                  <Card className="bg-red-500/10 border-red-500/20 rounded-3xl">
+                    <CardContent className="py-3 px-4 text-xs text-red-200 sm:py-4 sm:text-sm">{historyError}</CardContent>
                   </Card>
                 )}
 
-                <Card className="bg-white/5 border-white/10">
-                  <CardHeader>
-                    <CardTitle className="text-white flex items-center">
-                      <Trophy className="w-5 h-5 mr-2" />
+                <Card className="bg-white/5 border-white/10 rounded-3xl">
+                  <CardHeader className="p-4 sm:p-6">
+                    <CardTitle className="text-white flex items-center text-base sm:text-lg">
+                      <Trophy className="w-4 h-4 mr-2 flex-shrink-0 sm:w-5 sm:h-5" />
                       Seasons Joined
                     </CardTitle>
-                    <CardDescription className="text-white/60">
+                    <CardDescription className="text-white/60 text-xs sm:text-sm">
                       {historyLoading ? 'Loading seasons...' : `${joinedSeasons.length} seasons`}
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-3">
+                  <CardContent className="p-4 pt-0 space-y-2 sm:p-6 sm:pt-0 sm:space-y-3">
                     {!historyLoading && joinedSeasons.length === 0 && (
-                      <p className="text-sm text-white/60">You have not joined any seasons yet.</p>
+                      <p className="text-xs text-white/60 py-2 sm:text-sm">You have not joined any seasons yet.</p>
                     )}
                     {joinedSeasons.slice(0, 6).map((season) => (
                       <div
                         key={season.seasonId}
-                        className="flex flex-col gap-1 rounded-lg border border-white/10 bg-black/30 px-4 py-3"
+                        className="flex flex-col gap-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 sm:px-4 sm:py-3"
                       >
-                        <div className="flex items-center justify-between">
-                          <p className="text-sm font-semibold text-white">
+                        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+                          <p className="text-xs font-semibold text-white line-clamp-1 sm:text-sm">
                             {season.tournament?.name || 'Tournament'} · {season.name || `Season ${season.seasonNumber}`}
                           </p>
-                          <Badge className="bg-white/10 text-white/80 border-white/10">
+                          <Badge className="bg-white/10 text-white/80 border-white/10 text-[10px] px-1.5 py-0 self-start sm:text-xs sm:px-2 sm:py-0.5 sm:self-center">
                             {season.status}
                           </Badge>
                         </div>
-                        <p className="text-xs text-white/60">
+                        <p className="text-[10px] text-white/60 sm:text-xs">
                           Joined {season.joinedAt ? new Date(season.joinedAt).toLocaleDateString() : '—'}
                         </p>
                       </div>
@@ -697,34 +750,34 @@ const ProfilePage: React.FC = () => {
                   </CardContent>
                 </Card>
 
-                <Card className="bg-white/5 border-white/10">
-                  <CardHeader>
-                    <CardTitle className="text-white flex items-center">
-                      <Award className="w-5 h-5 mr-2" />
+                <Card className="bg-white/5 border-white/10 rounded-3xl">
+                  <CardHeader className="p-4 sm:p-6">
+                    <CardTitle className="text-white flex items-center text-base sm:text-lg">
+                      <Award className="w-4 h-4 mr-2 flex-shrink-0 sm:w-5 sm:h-5" />
                       Seasons Won
                     </CardTitle>
-                    <CardDescription className="text-white/60">
+                    <CardDescription className="text-white/60 text-xs sm:text-sm">
                       {historyLoading ? 'Loading wins...' : `${wonSeasons.length} wins`}
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-3">
+                  <CardContent className="p-4 pt-0 space-y-2 sm:p-6 sm:pt-0 sm:space-y-3">
                     {!historyLoading && wonSeasons.length === 0 && (
-                      <p className="text-sm text-white/60">No season wins yet. Keep playing!</p>
+                      <p className="text-xs text-white/60 py-2 sm:text-sm">No season wins yet. Keep playing!</p>
                     )}
                     {wonSeasons.slice(0, 6).map((season) => (
                       <div
                         key={season.seasonId}
-                        className="flex flex-col gap-1 rounded-lg border border-emerald-400/20 bg-emerald-500/10 px-4 py-3"
+                        className="flex flex-col gap-1 rounded-lg border border-emerald-400/20 bg-emerald-500/10 px-3 py-2 sm:px-4 sm:py-3"
                       >
-                        <div className="flex items-center justify-between">
-                          <p className="text-sm font-semibold text-white">
+                        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+                          <p className="text-xs font-semibold text-white line-clamp-1 sm:text-sm">
                             {season.tournament?.name || 'Tournament'} · {season.name || `Season ${season.seasonNumber}`}
                           </p>
-                          <Badge className="bg-emerald-500/20 text-emerald-200 border-emerald-400/30">
+                          <Badge className="bg-emerald-500/20 text-emerald-200 border-emerald-400/30 text-[10px] px-1.5 py-0 self-start sm:text-xs sm:px-2 sm:py-0.5 sm:self-center">
                             Winner
                           </Badge>
                         </div>
-                        <p className="text-xs text-emerald-100/80">
+                        <p className="text-[10px] text-emerald-100/80 sm:text-xs">
                           Completed {new Date(season.endTime).toLocaleDateString()}
                         </p>
                       </div>
@@ -735,46 +788,46 @@ const ProfilePage: React.FC = () => {
             </TabsContent>
 
             <TabsContent value="matches">
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6">
                 {historyError && (
-                  <Card className="bg-red-500/10 border-red-500/20">
-                    <CardContent className="py-4 text-sm text-red-200">{historyError}</CardContent>
+                  <Card className="bg-red-500/10 border-red-500/20 rounded-3xl">
+                    <CardContent className="py-3 px-4 text-xs text-red-200 sm:py-4 sm:text-sm">{historyError}</CardContent>
                   </Card>
                 )}
 
-                <Card className="bg-white/5 border-white/10">
-                  <CardHeader>
-                    <CardTitle className="text-white flex items-center">
-                      <Target className="w-5 h-5 mr-2" />
+                <Card className="bg-white/5 border-white/10 rounded-3xl">
+                  <CardHeader className="p-4 sm:p-6">
+                    <CardTitle className="text-white flex items-center text-base sm:text-lg">
+                      <Target className="w-4 h-4 mr-2 flex-shrink-0 sm:w-5 sm:h-5" />
                       Matches Played
                     </CardTitle>
-                    <CardDescription className="text-white/60">
+                    <CardDescription className="text-white/60 text-xs sm:text-sm">
                       {historyLoading ? 'Loading matches...' : `${playedMatches.length} completed`}
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-3">
+                  <CardContent className="p-4 pt-0 space-y-2 sm:p-6 sm:pt-0 sm:space-y-3">
                     {!historyLoading && playedMatches.length === 0 && (
-                      <p className="text-sm text-white/60">No completed matches yet.</p>
+                      <p className="text-xs text-white/60 py-2 sm:text-sm">No completed matches yet.</p>
                     )}
                     {playedMatches.slice(0, 6).map((match) => (
                       <div
                         key={match.matchId}
-                        className="flex items-center justify-between rounded-lg border border-white/10 bg-black/30 px-4 py-3"
+                        className="flex flex-col gap-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-3 sm:gap-2"
                       >
-                        <div className="space-y-1">
-                          <p className="text-sm font-semibold text-white">
+                        <div className="space-y-0.5">
+                          <p className="text-xs font-semibold text-white sm:text-sm">
                             Match {match.matchId.slice(0, 8)}
                           </p>
-                          <p className="text-xs text-white/60">
+                          <p className="text-[10px] text-white/60 sm:text-xs">
                             {match.seasonId ? `Season ${String(match.seasonId).slice(0, 8)}` : 'Friendly match'}
                           </p>
                         </div>
                         <Badge
-                          className={
+                          className={`${
                             match.winnerId === profile.id
                               ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/30'
                               : 'bg-red-500/20 text-red-200 border-red-400/30'
-                          }
+                          } text-[10px] px-1.5 py-0 self-start sm:text-xs sm:px-2 sm:py-0.5 sm:self-center`}
                         >
                           {match.winnerId === profile.id ? 'Won' : 'Lost'}
                         </Badge>
@@ -783,34 +836,34 @@ const ProfilePage: React.FC = () => {
                   </CardContent>
                 </Card>
 
-                <Card className="bg-white/5 border-white/10">
-                  <CardHeader>
-                    <CardTitle className="text-white flex items-center">
-                      <Trophy className="w-5 h-5 mr-2" />
+                <Card className="bg-white/5 border-white/10 rounded-3xl">
+                  <CardHeader className="p-4 sm:p-6">
+                    <CardTitle className="text-white flex items-center text-base sm:text-lg">
+                      <Trophy className="w-4 h-4 mr-2 flex-shrink-0 sm:w-5 sm:h-5" />
                       Matches Won
                     </CardTitle>
-                    <CardDescription className="text-white/60">
+                    <CardDescription className="text-white/60 text-xs sm:text-sm">
                       {historyLoading ? 'Loading wins...' : `${wonMatches.length} wins`}
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-3">
+                  <CardContent className="p-4 pt-0 space-y-2 sm:p-6 sm:pt-0 sm:space-y-3">
                     {!historyLoading && wonMatches.length === 0 && (
-                      <p className="text-sm text-white/60">No wins recorded yet.</p>
+                      <p className="text-xs text-white/60 py-2 sm:text-sm">No wins recorded yet.</p>
                     )}
                     {wonMatches.slice(0, 6).map((match) => (
                       <div
                         key={match.matchId}
-                        className="flex items-center justify-between rounded-lg border border-emerald-400/20 bg-emerald-500/10 px-4 py-3"
+                        className="flex flex-col gap-1 rounded-lg border border-emerald-400/20 bg-emerald-500/10 px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-3 sm:gap-2"
                       >
-                        <div className="space-y-1">
-                          <p className="text-sm font-semibold text-white">
+                        <div className="space-y-0.5">
+                          <p className="text-xs font-semibold text-white sm:text-sm">
                             Match {match.matchId.slice(0, 8)}
                           </p>
-                          <p className="text-xs text-emerald-100/80">
+                          <p className="text-[10px] text-emerald-100/80 sm:text-xs">
                             {match.seasonId ? `Season ${String(match.seasonId).slice(0, 8)}` : 'Friendly match'}
                           </p>
                         </div>
-                        <Badge className="bg-emerald-500/20 text-emerald-200 border-emerald-400/30">
+                        <Badge className="bg-emerald-500/20 text-emerald-200 border-emerald-400/30 text-[10px] px-1.5 py-0 self-start sm:text-xs sm:px-2 sm:py-0.5 sm:self-center">
                           Winner
                         </Badge>
                       </div>
@@ -821,70 +874,69 @@ const ProfilePage: React.FC = () => {
             </TabsContent>
 
             <TabsContent value="settings">
-              <div className="space-y-6">
-                <Card className="bg-white/5 border-white/10">
-                  <CardHeader>
-                    <CardTitle className="text-white flex items-center">
-                      <User className="w-5 h-5 mr-2" />
+              <div className="space-y-4 sm:space-y-6">
+                <Card className="bg-white/5 border-white/10 rounded-3xl">
+                  <CardHeader className="p-4 sm:p-6">
+                    <CardTitle className="text-white flex items-center text-base sm:text-lg">
+                      <User className="w-4 h-4 mr-2 flex-shrink-0 sm:w-5 sm:h-5" />
                       Profile Information
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="displayName" className="text-white">Display Name</Label>
+                  <CardContent className="p-4 pt-0 space-y-3 sm:p-6 sm:pt-0 sm:space-y-4">
+                    <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
+                      <div className="space-y-1.5 sm:space-y-2">
+                        <Label htmlFor="displayName" className="text-white text-xs sm:text-sm">Display Name</Label>
                         <Input
                           id="displayName"
                           value={formData.displayName}
                           onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
                           disabled={!isEditing}
-                          className="bg-black/20 border-white/10 text-white placeholder-white/40"
+                          className="bg-black/20 border-white/10 text-white placeholder-white/40 h-9 text-sm sm:h-10"
                         />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="email" className="text-white">Email</Label>
+                      <div className="space-y-1.5 sm:space-y-2">
+                        <Label htmlFor="email" className="text-white text-xs sm:text-sm">Email</Label>
                         <Input
                           id="email"
                           type="email"
                           value={formData.email}
                           onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                           disabled={!isEditing}
-                          className="bg-black/20 border-white/10 text-white placeholder-white/40"
+                          className="bg-black/20 border-white/10 text-white placeholder-white/40 h-9 text-sm sm:h-10"
                         />
                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="phone" className="text-white">Phone Number</Label>
+                    <div className="space-y-1.5 sm:space-y-2">
+                      <Label htmlFor="phone" className="text-white text-xs sm:text-sm">Phone Number</Label>
                       <Input
                         id="phone"
                         type="tel"
                         value={formData.phone}
                         onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                         disabled={!isEditing}
-                        className="bg-black/20 border-white/10 text-white placeholder-white/40"
+                        className="bg-black/20 border-white/10 text-white placeholder-white/40 h-9 text-sm sm:h-10"
                       />
                     </div>
 
-                    <div className="flex space-x-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
                       {isEditing ? (
                         <>
                           <Button
                             onClick={handleSaveProfile}
                             disabled={isLoading}
-                            className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                            className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 h-9 text-sm sm:h-10"
                           >
                             {isLoading ? 'Saving...' : (
                               <>
-                                <Save className="w-4 h-4 mr-2" />
+                                <Save className="w-3.5 h-3.5 mr-1.5 sm:w-4 sm:h-4 sm:mr-2" />
                                 Save Changes
                               </>
                             )}
                           </Button>
                           <Button
-                            
                             onClick={() => setIsEditing(false)}
-                            className="border-white/20 text-white/80 hover:bg-white/10"
+                            className="border-white/20 text-white/80 hover:bg-white/10 h-9 text-sm sm:h-10"
                           >
                             Cancel
                           </Button>
@@ -892,9 +944,9 @@ const ProfilePage: React.FC = () => {
                       ) : (
                         <Button
                           onClick={() => setIsEditing(true)}
-                          className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                          className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 h-9 text-sm sm:h-10"
                         >
-                          <Settings className="w-4 h-4 mr-2" />
+                          <Settings className="w-3.5 h-3.5 mr-1.5 sm:w-4 sm:h-4 sm:mr-2" />
                           Edit Profile
                         </Button>
                       )}
@@ -902,82 +954,69 @@ const ProfilePage: React.FC = () => {
                   </CardContent>
                 </Card>
 
-                {/* ✅ Password reset card (correct for your backend) */}
-                <Card className="bg-white/5 border-white/10">
-                  <CardHeader>
-                    <CardTitle className="text-white flex items-center">
-                      <Shield className="w-5 h-5 mr-2" />
-                      Reset Password
+                <Card className="bg-white/5 border-white/10 rounded-3xl">
+                  <CardHeader className="p-4 sm:p-6">
+                    <CardTitle className="text-white flex items-center text-base sm:text-lg">
+                      <Shield className="w-4 h-4 mr-2 flex-shrink-0 sm:w-5 sm:h-5" />
+                      Change Password
                     </CardTitle>
-                    <CardDescription className="text-white/60">
-                      We’ll email you a reset code, then you set a new password.
+                    <CardDescription className="text-white/60 text-xs sm:text-sm">
+                      Update your password using your current one.
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-4">
+                  <CardContent className="p-4 pt-0 space-y-3 sm:p-6 sm:pt-0 sm:space-y-4">
+                    <div className="space-y-1.5 sm:space-y-2">
+                      <Label htmlFor="currentPassword" className="text-white text-xs sm:text-sm">Current Password</Label>
+                      <Input
+                        id="currentPassword"
+                        type={showPassword ? 'text' : 'password'}
+                        value={formData.currentPassword}
+                        onChange={(e) => setFormData({ ...formData, currentPassword: e.target.value })}
+                        className="bg-black/20 border-white/10 text-white placeholder-white/40 h-9 text-sm sm:h-10"
+                      />
+                    </div>
+
+                    <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
+                      <div className="space-y-1.5 sm:space-y-2">
+                        <Label htmlFor="newPassword" className="text-white text-xs sm:text-sm">New Password</Label>
+                        <Input
+                          id="newPassword"
+                          type={showPassword ? 'text' : 'password'}
+                          value={formData.newPassword}
+                          onChange={(e) => setFormData({ ...formData, newPassword: e.target.value })}
+                          className="bg-black/20 border-white/10 text-white placeholder-white/40 h-9 text-sm sm:h-10"
+                        />
+                      </div>
+                      <div className="space-y-1.5 sm:space-y-2">
+                        <Label htmlFor="confirmPassword" className="text-white text-xs sm:text-sm">Confirm New Password</Label>
+                        <Input
+                          id="confirmPassword"
+                          type={showPassword ? 'text' : 'password'}
+                          value={formData.confirmPassword}
+                          onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                          className="bg-black/20 border-white/10 text-white placeholder-white/40 h-9 text-sm sm:h-10"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="showPassword"
+                        checked={showPassword}
+                        onChange={(e) => setShowPassword(e.target.checked)}
+                        className="rounded border-white/20 bg-black/30 text-purple-500 h-4 w-4"
+                      />
+                      <Label htmlFor="showPassword" className="text-white/70 text-xs sm:text-sm cursor-pointer">Show passwords</Label>
+                    </div>
+
                     <Button
-                      onClick={handleSendResetCode}
-                      disabled={isLoading || !formData.email}
-                      className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                      onClick={handlePasswordChange}
+                      disabled={isLoading || !formData.currentPassword || !formData.newPassword}
+                      className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 h-9 text-sm sm:h-10 w-full sm:w-auto"
                     >
-                      {isLoading ? 'Sending...' : (resetStep === 'codeSent' ? 'Resend Code' : 'Send Reset Code')}
+                      {isLoading ? 'Updating...' : 'Change Password'}
                     </Button>
-
-                    {resetStep === 'codeSent' && (
-                      <>
-                        <div className="space-y-2">
-                          <Label htmlFor="resetCode" className="text-white">Reset Code</Label>
-                          <Input
-                            id="resetCode"
-                            value={formData.resetCode}
-                            onChange={(e) => setFormData({ ...formData, resetCode: e.target.value })}
-                            className="bg-black/20 border-white/10 text-white placeholder-white/40"
-                            placeholder="Enter the code sent to your email"
-                          />
-                        </div>
-
-                        <div className="grid md:grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="newPassword" className="text-white">New Password</Label>
-                            <Input
-                              id="newPassword"
-                              type={showPassword ? 'text' : 'password'}
-                              value={formData.newPassword}
-                              onChange={(e) => setFormData({ ...formData, newPassword: e.target.value })}
-                              className="bg-black/20 border-white/10 text-white placeholder-white/40"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="confirmPassword" className="text-white">Confirm New Password</Label>
-                            <Input
-                              id="confirmPassword"
-                              type={showPassword ? 'text' : 'password'}
-                              value={formData.confirmPassword}
-                              onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                              className="bg-black/20 border-white/10 text-white placeholder-white/40"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
-                            id="showPassword"
-                            checked={showPassword}
-                            onChange={(e) => setShowPassword(e.target.checked)}
-                            className="rounded border-white/20 bg-black/30 text-purple-500"
-                          />
-                          <Label htmlFor="showPassword" className="text-white/70">Show passwords</Label>
-                        </div>
-
-                        <Button
-                          onClick={handlePasswordChange}
-                          disabled={isLoading || !formData.resetCode || !formData.newPassword}
-                          className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
-                        >
-                          {isLoading ? 'Resetting...' : 'Reset Password'}
-                        </Button>
-                      </>
-                    )}
                   </CardContent>
                 </Card>
               </div>
@@ -987,29 +1026,27 @@ const ProfilePage: React.FC = () => {
               <NotificationPreferences />
             </TabsContent>
           </Tabs>
-        </div>
       </div>
 
       {message && (
         <div
-          className={`fixed bottom-4 right-4 p-4 rounded-lg ${
+          className={`fixed bottom-3 right-3 left-3 p-3 rounded-lg shadow-lg backdrop-blur-sm sm:bottom-4 sm:right-4 sm:left-auto sm:max-w-md sm:p-4 ${
             message.toLowerCase().includes('success') || message.toLowerCase().includes('sent')
               ? 'bg-green-500/20 border-green-500/30'
               : 'bg-red-500/20 border-red-500/30'
           } border`}
         >
           <p
-            className={
+            className={`text-xs sm:text-sm ${
               message.toLowerCase().includes('success') || message.toLowerCase().includes('sent')
                 ? 'text-green-400'
                 : 'text-red-400'
-            }
+            }`}
           >
             {message}
           </p>
         </div>
       )}
-    </div>
     </div>
   );
 };

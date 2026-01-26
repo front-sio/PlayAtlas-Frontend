@@ -86,17 +86,23 @@ class GameSocketService {
     this.connectionStatus = 'connecting';
     this.lastConnectionError = null;
 
-    const gameServiceUrl = process.env.NEXT_PUBLIC_GAME_SERVICE_URL || 'http://localhost:3006';
+    const fallbackBase = process.env.NODE_ENV === 'development' ? 'http://localhost:3006' : '';
+    const rawBase = process.env.NEXT_PUBLIC_GAME_SERVICE_URL
+      || process.env.NEXT_PUBLIC_ADMIN_WS_URL
+      || process.env.NEXT_PUBLIC_API_URL
+      || fallbackBase;
+    const gameServiceUrl = rawBase.replace(/\/api\/?$/, '');
     const socketPathOverride = process.env.NEXT_PUBLIC_GAME_SOCKET_PATH;
     const socketTarget = socketPathOverride
       ? `${gameServiceUrl.replace(/\/$/, '')}${socketPathOverride}`
       : gameServiceUrl;
     const { url, path } = normalizeSocketTarget(socketTarget);
+    const connectionUrl = url || undefined;
 
-    console.log('[GameSocket] Connecting to:', url);
+    console.log('[GameSocket] Connecting to:', connectionUrl || 'same origin');
     console.log('[GameSocket] Using path:', path);
 
-    this.socket = io(url, {
+    this.socket = io(connectionUrl, {
       path,
       transports: ['websocket', 'polling'],
       reconnection: true,

@@ -43,10 +43,11 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
     if (!userId) return;
 
     // Connect to Socket.IO
-    const socketUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+    const socketUrl = process.env.NEXT_PUBLIC_ADMIN_WS_URL || '';
     const { url, path } = normalizeSocketTarget(socketUrl);
     
-    const newSocket = io(url, {
+    const connectionUrl = url || undefined;
+    const newSocket = io(connectionUrl, {
       path,
       transports: ['websocket', 'polling'],
       auth: {

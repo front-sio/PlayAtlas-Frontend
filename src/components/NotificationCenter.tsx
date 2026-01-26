@@ -110,8 +110,9 @@ export const NotificationCenter: React.FC = () => {
     if (action === 'join_season' && notification.data.tournamentId) {
       router.push(`/tournaments/${notification.data.tournamentId}?season=${notification.data.seasonId}`);
     } else if (action === 'join_match' && notification.data.matchId) {
-      // Redirect to the correct match page path
-      router.push(`/game/match/${notification.data.matchId}`);
+      const matchType = notification.data.gameType || (notification.data.withAi ? 'with_ai' : null);
+      const basePath = matchType === 'with_ai' ? '/game/match/pc' : '/game/match';
+      router.push(`${basePath}/${notification.data.matchId}`);
     }
     
     // Mark as read when action is taken

@@ -20,7 +20,15 @@ interface AgentUser {
   role: string;
   isActive: boolean;
   isVerified: boolean;
+  clubId?: string | null;
   createdAt?: string;
+}
+
+interface Club {
+  clubId: string;
+  name: string;
+  locationText?: string | null;
+  status?: string;
 }
 
 export default function AdminAgentsPage() {
@@ -31,7 +39,10 @@ export default function AdminAgentsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
+  const [clubs, setClubs] = useState<Club[]>([]);
+  const [clubsLoading, setClubsLoading] = useState(false);
   const [form, setForm] = useState({
+    clubId: '',
     username: '',
     email: '',
     password: '',
@@ -44,6 +55,23 @@ export default function AdminAgentsPage() {
   useEffect(() => {
     if (!token || !canManageUsers(role)) return;
     loadAgents();
+  }, [token, role]);
+
+  useEffect(() => {
+    if (!token || !canManageUsers(role)) return;
+    setClubsLoading(true);
+    adminApi
+      .getClubs(token)
+      .then((result) => {
+        if (result.success && result.data) {
+          const payload = (result.data as any)?.data || result.data;
+          setClubs((payload || []) as Club[]);
+        }
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : 'Failed to load clubs');
+      })
+      .finally(() => setClubsLoading(false));
   }, [token, role]);
 
   // Listen for real-time Socket.IO updates
@@ -94,6 +122,7 @@ export default function AdminAgentsPage() {
       const result = await adminApi.createAgent(token, form);
       if (result.success) {
         setForm({
+          clubId: '',
           username: '',
           email: '',
           password: '',
@@ -125,6 +154,21 @@ export default function AdminAgentsPage() {
         </CardHeader>
         <CardContent>
           <form className="grid gap-4 md:grid-cols-2" onSubmit={handleCreate}>
+            <select
+              value={form.clubId}
+              onChange={(event) => handleChange('clubId', event.target.value)}
+              className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
+              required
+            >
+              <option value="" disabled>
+                {clubsLoading ? 'Loading clubs...' : 'Select club'}
+              </option>
+              {clubs.map((club) => (
+                <option key={club.clubId} value={club.clubId}>
+                  {club.name}
+                </option>
+              ))}
+            </select>
             <Input
               value={form.username}
               onChange={(event) => handleChange('username', event.target.value)}

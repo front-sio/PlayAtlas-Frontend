@@ -24,9 +24,9 @@ export default function NotFound() {
             <Button asChild className="bg-emerald-600 hover:bg-emerald-700">
               <Link href="/dashboard">Go to Dashboard</Link>
             </Button>
-            <Button asChild  className="border-white/20 text-white hover:bg-white/10">
+            {/* <Button asChild  className="border-white/20 text-white hover:bg-white/10">
               <Link href="/admin">Admin Home</Link>
-            </Button>
+            </Button> */}
           </div>
         </CardContent>
       </Card>

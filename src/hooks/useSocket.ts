@@ -15,6 +15,7 @@ export function useSocket(options: UseSocketOptions = {}) {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
+  const socketTarget = normalizeSocketTarget(process.env.NEXT_PUBLIC_ADMIN_WS_URL || '');
 
   useEffect(() => {
     if (!enabled || status !== 'authenticated' || !session) {
@@ -22,11 +23,10 @@ export function useSocket(options: UseSocketOptions = {}) {
     }
 
     const token = (session as any).accessToken;
-    const WS_URL = process.env.NEXT_PUBLIC_ADMIN_WS_URL || 'ws://localhost:8081';
-    const { url, path } = normalizeSocketTarget(WS_URL);
+    const connectionUrl = socketTarget.url || undefined;
 
-    const socketInstance = io(url, {
-      path,
+    const socketInstance = io(connectionUrl, {
+      path: socketTarget.path,
       auth: {
         token: token
       },
@@ -101,7 +101,7 @@ export function useSocket(options: UseSocketOptions = {}) {
       setIsConnected(false);
       setReconnectAttempts(0);
     };
-  }, [enabled, status, session, maxReconnectAttempts, reconnectDelay]);
+  }, [enabled, status, session, maxReconnectAttempts, reconnectDelay, socketTarget.url, socketTarget.path]);
 
   const emit = useCallback((event: string, data: any) => {
     if (socket && isConnected) {

@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AccessDenied } from '@/components/admin/AccessDenied';
 import { canViewFinancialReports } from '@/lib/permissions';
+import { getApiBaseUrl } from '@/lib/apiBase';
 import {
   Calendar,
   TrendingUp,
@@ -42,6 +43,7 @@ export default function PlatformRevenuePage() {
   const { data: session, status } = useSession();
   const role = (session?.user as any)?.role;
   const token = (session as any)?.accessToken;
+  const apiBase = getApiBaseUrl();
   
   const [revenueData, setRevenueData] = useState<PlatformRevenueData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -87,7 +89,7 @@ export default function PlatformRevenuePage() {
         }
 
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/revenue/platform?startDate=${start.toISOString()}&endDate=${end.toISOString()}`,
+          `${apiBase}/revenue/platform?startDate=${start.toISOString()}&endDate=${end.toISOString()}`,
           {
             headers: {
               'Authorization': `Bearer ${token}`,

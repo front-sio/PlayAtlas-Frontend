@@ -1,8 +1,35 @@
 import type { NextAuthOptions } from "next-auth";
 import { authApi } from "@/lib/apiService";
+import { getApiBaseUrl } from "@/lib/apiBase";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "") || "http://localhost:8080/api";
+const API_BASE_URL = getApiBaseUrl();
+const useSecureCookies = process.env.NODE_ENV === "production";
+
+const cookieDomainFromUrl = (() => {
+  const override = process.env.NEXTAUTH_COOKIE_DOMAIN?.trim();
+  if (override) return override;
+  if (!process.env.NEXTAUTH_URL) return undefined;
+  try {
+    const { hostname } = new URL(process.env.NEXTAUTH_URL);
+    if (hostname === "localhost" || /^\d+\.\d+\.\d+\.\d+$/.test(hostname)) {
+      return undefined;
+    }
+    if (hostname.endsWith(".stebofarm.co.tz")) {
+      return ".stebofarm.co.tz";
+    }
+    return hostname;
+  } catch {
+    return undefined;
+  }
+})();
+
+const sessionCookieOptions = {
+  httpOnly: true,
+  sameSite: "none" as const,
+  path: "/",
+  secure: useSecureCookies,
+  ...(cookieDomainFromUrl ? { domain: cookieDomainFromUrl } : {}),
+};
 
 const TOKEN_REFRESH_BUFFER_MS = 60 * 1000;
 
@@ -50,7 +77,13 @@ const refreshAccessToken = async (refreshToken: string) => {
 
 export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
-  debug: true,
+  debug: process.env.NODE_ENV === "development",
+  useSecureCookies,
+  cookies: {
+    sessionToken: {
+      options: sessionCookieOptions,
+    },
+  },
   providers: [
     {
       id: "credentials",
@@ -66,35 +99,69 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
+        console.log("🔐 Starting authorization for:", credentials.identifier);
+        
         try {
+          console.log("📡 Calling authApi.login...");
           const result = await authApi.login({
             identifier: credentials.identifier as string,
             password: credentials.password as string,
           });
 
-          if (result.success) {
+          console.log("📥 Auth API result:", { 
+            success: result.success, 
+            hasUser: !!result.data?.user,
+            hasTokens: !!result.data?.accessToken && !!result.data?.refreshToken 
+          });
+
+          if (result.success && result.data?.user && result.data?.accessToken) {
+            console.log("✅ Login successful, returning user data");
             return {
-              ...result.data.user,
+              id: result.data.user.userId,
+              userId: result.data.user.userId,
+              email: result.data.user.email,
+              username: result.data.user.username,
+              firstName: result.data.user.firstName,
+              lastName: result.data.user.lastName,
+              role: result.data.user.role,
+              isVerified: result.data.user.isVerified,
+              phoneNumber: result.data.user.phoneNumber,
+              gender: result.data.user.gender,
               accessToken: result.data.accessToken,
               refreshToken: result.data.refreshToken,
             } as any;
           }
 
           if (result.error?.includes("Account not verified")) {
+            console.log("📧 Account not verified");
             throw new Error("ACCOUNT_NOT_VERIFIED");
           }
 
+          console.log("❌ Login failed:", result.error || "Unknown error");
           return null;
         } catch (error: any) {
+          console.error("💥 Auth error:", error);
+          
           const payload = error?.data;
           if (payload?.requiresVerification) {
             const userId = payload.userId || "";
             const channel = payload.verificationChannel || "email";
+            console.log("📧 Verification required:", { userId, channel });
             throw new Error(`ACCOUNT_NOT_VERIFIED:${userId}:${channel}`);
           }
+          
           if (error.message === "ACCOUNT_NOT_VERIFIED") {
             throw new Error("ACCOUNT_NOT_VERIFIED");
           }
+          
+          // Log the actual error for debugging
+          console.error("💥 Detailed auth error:", {
+            message: error.message,
+            status: error.status,
+            data: error.data,
+            rawResponse: error.rawResponse?.slice(0, 500),
+          });
+          
           return null;
         }
       },
