@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3000 2>&1 | tee dev.log",
+    "dev": "next dev -H 0.0.0.0 -p 3000 2>&1 | tee dev.log",
     "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
     "start": "NODE_ENV=production node .next/standalone/server.js 2>&1 | tee server.log",
     "lint": "next lint",
@@ -72,6 +72,8 @@
     "react-resizable-panels": "^3.0.3",
     "react-syntax-highlighter": "^16.1.0",
     "recharts": "^2.15.4",
+    "@zxing/browser": "^0.1.5",
+    "qrcode": "^1.5.3",
     "sharp": "^0.34.3",
     "socket.io-client": "^4.8.1",
     "sonner": "^2.0.6",

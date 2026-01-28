@@ -1,9 +1,11 @@
 "use client";
 
 import React, { useMemo } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Clock, MapPin, Trophy, ArrowRight, CheckCircle, Play, AlertCircle } from "lucide-react";
+import { Clock, Trophy, ArrowRight, CheckCircle, Play, AlertCircle } from "lucide-react";
+import { getGameCategoryLabel, getGameRoute, normalizeGameCategory } from "@/lib/gameCategories";
 
 type MatchStatus = string;
 
@@ -21,11 +23,10 @@ export interface Match {
 
   status: MatchStatus;
   scheduledStartAt?: string;
+  gameCategory?: string;
 
-  assignedDeviceId?: string;
-  assignedAgentId?: string;
-  assignedAgentName?: string;
-  assignedDeviceName?: string;
+  assignedHostPlayerUserId?: string;
+  verificationStatus?: string;
 
   // Bracket links (if your backend supports it)
   winnerAdvancesToMatchId?: string;
@@ -155,8 +156,8 @@ export function BracketViewFullMap({ fixtures }: { fixtures: FixturesPayload }) 
                   <div className="text-xs text-white/65 flex items-center gap-2">
                     <Clock className="h-3 w-3" /> {fmtTime(finalMatch.scheduledStartAt)}
                   </div>
-                  <div className="text-xs text-white/65 flex items-center gap-2">
-                    <MapPin className="h-3 w-3" /> {deskLabel(finalMatch)}
+                  <div className="text-xs text-white/65">
+                    Host: {hostLabel(finalMatch)}
                   </div>
                 </div>
               ) : (
@@ -274,10 +275,11 @@ function playerLabel(id?: string) {
   return `Player ${id.slice(-4)}`;
 }
 
-function deskLabel(m: Match) {
-  const agent = m.assignedAgentName || (m.assignedAgentId ? `Agent ${m.assignedAgentId.slice(-4)}` : "Agent TBD");
-  const device = m.assignedDeviceName || (m.assignedDeviceId ? `Device ${m.assignedDeviceId.slice(-1)}` : "Device TBD");
-  return `${agent} • ${device}`;
+function hostLabel(m: Match) {
+  if (!m.assignedHostPlayerUserId) return "Host TBD";
+  if (m.assignedHostPlayerUserId === m.player1Id) return "Player 1";
+  if (m.assignedHostPlayerUserId === m.player2Id) return "Player 2";
+  return "Host TBD";
 }
 
 function statusMeta(status: string) {
@@ -299,46 +301,25 @@ function roundTitle(r: string) {
 function MiniMatchCard({ match }: { match: Match }) {
   const meta = statusMeta(match.status);
   const Icon = meta.Icon;
+  const category = normalizeGameCategory(match.gameCategory) || 'BILLIARDS';
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/5 p-2">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="text-sm text-white/90 truncate">
-            {playerLabel(match.player1Id)} <span className="text-white/50">vs</span> {playerLabel(match.player2Id)}
-          </div>
-          <div className="mt-1 flex items-center gap-2 text-xs text-white/65">
-            <Clock className="h-3 w-3" /> {fmtTime(match.scheduledStartAt)}
-          </div>
-          <div className="mt-1 flex items-center gap-2 text-xs text-white/65">
-            <MapPin className="h-3 w-3" /> {deskLabel(match)}
-          </div>
-        </div>
-
-        <Badge className={`border ${meta.cls}`}>
-          <Icon className="h-3 w-3 mr-1" />
-          {meta.label}
-        </Badge>
-      </div>
-    </div>
-  );
-}
-
-function BracketMatchCard({ match, next }: { match: Match; next?: Match }) {
-  const meta = statusMeta(match.status);
-  const Icon = meta.Icon;
-
-  const winnerIsP1 = !!(match.winnerId && match.player1Id && match.winnerId === match.player1Id);
-  const winnerIsP2 = !!(match.winnerId && match.player2Id && match.winnerId === match.player2Id);
-
-  return (
-    <Card className={`bg-white/5 border-white/10 ${match.isPlayerMatch ? "ring-1 ring-blue-500/40" : ""}`}>
-      <CardContent className="p-3 space-y-2">
-        {/* Header */}
+    <Link href={getGameRoute(category, match.matchId)} className="block">
+      <div className="rounded-xl border border-white/10 bg-white/5 p-2">
         <div className="flex items-start justify-between gap-2">
-          <div className="text-xs text-white/60">
-            Match <span className="font-mono text-white/80">{match.matchId.slice(0, 8)}</span>
-            <span className="text-white/40"> • #{match.matchNumber}</span>
+          <div className="min-w-0">
+            <div className="text-sm text-white/90 truncate">
+              {playerLabel(match.player1Id)} <span className="text-white/50">vs</span> {playerLabel(match.player2Id)}
+            </div>
+            <div className="mt-1 flex items-center gap-2 text-xs text-white/65">
+              <Clock className="h-3 w-3" /> {fmtTime(match.scheduledStartAt)}
+            </div>
+            <div className="mt-1 text-xs text-white/65">
+              {getGameCategoryLabel(category)}
+            </div>
+            <div className="mt-1 flex items-center gap-2 text-xs text-white/65">
+              Host: {hostLabel(match)}
+            </div>
           </div>
 
           <Badge className={`border ${meta.cls}`}>
@@ -346,62 +327,95 @@ function BracketMatchCard({ match, next }: { match: Match; next?: Match }) {
             {meta.label}
           </Badge>
         </div>
+      </div>
+    </Link>
+  );
+}
 
-        {/* Players */}
-        <div className="space-y-2">
-          <div className={`rounded-lg border p-2 ${winnerIsP1 ? "border-green-500/30 bg-green-600/10" : "border-white/10 bg-black/10"}`}>
-            <div className="text-sm text-white">
-              {playerLabel(match.player1Id)}
-              {winnerIsP1 ? <span className="ml-2 text-xs text-green-200">Winner</span> : null}
+function BracketMatchCard({ match, next }: { match: Match; next?: Match }) {
+  const meta = statusMeta(match.status);
+  const Icon = meta.Icon;
+  const category = normalizeGameCategory(match.gameCategory) || 'BILLIARDS';
+
+  const winnerIsP1 = !!(match.winnerId && match.player1Id && match.winnerId === match.player1Id);
+  const winnerIsP2 = !!(match.winnerId && match.player2Id && match.winnerId === match.player2Id);
+
+  return (
+    <Link href={getGameRoute(category, match.matchId)} className="block">
+      <Card className={`bg-white/5 border-white/10 ${match.isPlayerMatch ? "ring-1 ring-blue-500/40" : ""}`}>
+        <CardContent className="p-3 space-y-2">
+          {/* Header */}
+          <div className="flex items-start justify-between gap-2">
+            <div className="text-xs text-white/60">
+              Match <span className="font-mono text-white/80">{match.matchId.slice(0, 8)}</span>
+              <span className="text-white/40"> • #{match.matchNumber}</span>
             </div>
+
+            <Badge className={`border ${meta.cls}`}>
+              <Icon className="h-3 w-3 mr-1" />
+              {meta.label}
+            </Badge>
+          </div>
+          <div className="text-xs text-white/60">
+            {getGameCategoryLabel(category)}
           </div>
 
-          <div className={`rounded-lg border p-2 ${winnerIsP2 ? "border-green-500/30 bg-green-600/10" : "border-white/10 bg-black/10"}`}>
-            <div className="text-sm text-white">
-              {playerLabel(match.player2Id)}
-              {winnerIsP2 ? <span className="ml-2 text-xs text-green-200">Winner</span> : null}
-            </div>
-          </div>
-        </div>
-
-        {/* Meta */}
-        <div className="grid grid-cols-1 gap-2 rounded-xl border border-white/10 bg-black/10 p-2 text-xs text-white/65">
-          <div className="flex items-center gap-2">
-            <Clock className="h-3 w-3" /> {fmtTime(match.scheduledStartAt)}
-          </div>
-          <div className="flex items-center gap-2">
-            <MapPin className="h-3 w-3" /> {deskLabel(match)}
-          </div>
-        </div>
-
-        {/* Path (winner advances) */}
-        <div className="rounded-xl border border-white/10 bg-white/5 p-2 text-xs text-white/70">
-          {match.winnerAdvancesToMatchId ? (
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <ArrowRight className="h-3 w-3" />
-                Winner → <span className="font-mono">{match.winnerAdvancesToMatchId.slice(0, 8)}</span>
-                {match.winnerAdvancesToSlot ? <span className="text-white/50">(Slot {match.winnerAdvancesToSlot})</span> : null}
+          {/* Players */}
+          <div className="space-y-2">
+            <div className={`rounded-lg border p-2 ${winnerIsP1 ? "border-green-500/30 bg-green-600/10" : "border-white/10 bg-black/10"}`}>
+              <div className="text-sm text-white">
+                {playerLabel(match.player1Id)}
+                {winnerIsP1 ? <span className="ml-2 text-xs text-green-200">Winner</span> : null}
               </div>
-              {next ? (
-                <div className="text-white/60">
-                  Next: {playerLabel(next.player1Id)} vs {playerLabel(next.player2Id)}
-                </div>
-              ) : (
-                <div className="text-white/50">Next match details not loaded</div>
-              )}
             </div>
-          ) : (
-            <div className="text-white/55">Advancement mapping not available yet.</div>
-          )}
-        </div>
 
-        {match.isPlayerMatch ? (
-          <Badge variant="outline" className="border-blue-500/40 text-blue-200 bg-blue-600/10">
-            📍 Your match (play at assigned desk)
-          </Badge>
-        ) : null}
-      </CardContent>
-    </Card>
+            <div className={`rounded-lg border p-2 ${winnerIsP2 ? "border-green-500/30 bg-green-600/10" : "border-white/10 bg-black/10"}`}>
+              <div className="text-sm text-white">
+                {playerLabel(match.player2Id)}
+                {winnerIsP2 ? <span className="ml-2 text-xs text-green-200">Winner</span> : null}
+              </div>
+            </div>
+          </div>
+
+          {/* Meta */}
+          <div className="grid grid-cols-1 gap-2 rounded-xl border border-white/10 bg-black/10 p-2 text-xs text-white/65">
+            <div className="flex items-center gap-2">
+              <Clock className="h-3 w-3" /> {fmtTime(match.scheduledStartAt)}
+            </div>
+            <div className="flex items-center gap-2">
+              Host: {hostLabel(match)}
+            </div>
+          </div>
+
+          {/* Path (winner advances) */}
+          <div className="rounded-xl border border-white/10 bg-white/5 p-2 text-xs text-white/70">
+            {match.winnerAdvancesToMatchId ? (
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <ArrowRight className="h-3 w-3" />
+                  Winner → <span className="font-mono">{match.winnerAdvancesToMatchId.slice(0, 8)}</span>
+                  {match.winnerAdvancesToSlot ? <span className="text-white/50">(Slot {match.winnerAdvancesToSlot})</span> : null}
+                </div>
+                {next ? (
+                  <div className="text-white/60">
+                    Next: {playerLabel(next.player1Id)} vs {playerLabel(next.player2Id)}
+                  </div>
+                ) : (
+                  <div className="text-white/50">Next match details not loaded</div>
+                )}
+              </div>
+            ) : (
+              <div className="text-white/55">Advancement mapping not available yet.</div>
+            )}
+          </div>
+
+          {match.isPlayerMatch ? (
+            <Badge variant="outline" className="border-blue-500/40 text-blue-200 bg-blue-600/10">
+              📍 Your match (host verification required)
+            </Badge>
+          ) : null}
+        </CardContent>
+      </Card>
+    </Link>
   );
 }

@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { PageLoader } from '@/components/ui/page-loader';
 import { io, Socket } from 'socket.io-client';
 import { normalizeSocketTarget } from '@/lib/socket';
+import { getGameCategoryLabel, normalizeGameCategory } from '@/lib/gameCategories';
 
 interface Tournament {
   tournamentId: string;
@@ -19,6 +20,7 @@ interface Tournament {
   entryFee: number;
   maxPlayers: number;
   currentPlayers?: number;
+  gameCategory?: string | null;
   status: string;
   stage?: string;
   startTime?: string;
@@ -47,8 +49,9 @@ interface BracketMatch {
   winnerId?: string | null;
   status: string;
   scheduledStartAt?: string | null;
-  assignedAgentUserId?: string | null;
-  assignedAgentId?: string | null;
+  assignedHostPlayerUserId?: string | null;
+  verificationStatus?: string | null;
+  verifiedAt?: string | null;
   winnerAdvancesToMatchId?: string | null;
   winnerAdvancesToSlot?: string | null;
 }
@@ -430,7 +433,8 @@ export default function TournamentDetailPage() {
     const s = io(connectionUrl, {
       path: socketTarget.path,
       auth: token ? { token } : undefined,
-      transports: ['websocket'],
+      transports: ['polling'],
+      upgrade: false,
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000
@@ -606,6 +610,9 @@ export default function TournamentDetailPage() {
             <div className="flex flex-col items-end gap-2">
               <Badge className={`${statusColor(tournament.status)} text-white border-none`}>
                 {getStatusLabel(tournament.status)}
+              </Badge>
+              <Badge variant="outline" className="border-white/20 text-white/70">
+                {getGameCategoryLabel(normalizeGameCategory(tournament.gameCategory) || 'BILLIARDS')}
               </Badge>
               {socketConnected && (
                 <div className="flex items-center gap-1 text-xs text-green-300">

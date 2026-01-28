@@ -13,8 +13,10 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { generateColor, getInitials } from '@/lib/avatarUtils';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
-import { Trophy, User, Calendar, Target, Award, Settings, Camera, Save, Shield } from 'lucide-react';
+import { Trophy, User, Calendar, Target, Award, Settings, Camera, Save, Shield, Loader2 } from 'lucide-react';
+import { getApiBaseUrl } from '@/lib/apiBase';
 import { authApi, playerApi, tournamentApi, matchmakingApi } from '@/lib/apiService';
 import { PageLoader } from '@/components/ui/page-loader';
 import { NotificationPreferences } from '@/components/NotificationPreferences';
@@ -122,6 +124,7 @@ const ProfilePage: React.FC = () => {
   });
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isAvatarUploading, setIsAvatarUploading] = useState(false);
   const [message, setMessage] = useState('');
   const [profileLoading, setProfileLoading] = useState(true);
   const [error, setError] = useState('');
@@ -151,6 +154,30 @@ const ProfilePage: React.FC = () => {
     });
   };
 
+  const resolveAvatarUrl = (value?: string | null) => {
+    if (!value) return '';
+    const apiBase = getApiBaseUrl().replace(/\/$/, '');
+    if (value.startsWith('http')) {
+      try {
+        const parsed = new URL(value);
+        if (parsed.pathname.startsWith('/uploads/')) {
+          return `${apiBase}/auth${parsed.pathname}`;
+        }
+      } catch {
+        return value;
+      }
+      return value;
+    }
+    if (value.startsWith('blob:') || value.startsWith('data:')) {
+      return value;
+    }
+    const path = value.startsWith('/') ? value : `/${value}`;
+    if (path.startsWith('/uploads/')) {
+      return `${apiBase}/auth${path}`;
+    }
+    return `${apiBase}${path}`;
+  };
+
   const handleAvatarSelect = () => {
     avatarInputRef.current?.click();
   };
@@ -173,27 +200,22 @@ const ProfilePage: React.FC = () => {
       return;
     }
 
-    setIsLoading(true);
+    setIsAvatarUploading(true);
     setMessage('');
 
     try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result || ''));
-        reader.onerror = () => reject(new Error('Failed to read file'));
-        reader.readAsDataURL(file);
-      });
-
-      const response = await authApi.updateAvatar(token, dataUrl);
+      const previewUrl = URL.createObjectURL(file);
+      const response = await authApi.updateAvatar(token, file);
       const updated = response?.data;
 
-      setProfile((prev) => (prev ? { ...prev, avatar: updated?.avatarUrl || dataUrl } : prev));
+      const resolvedAvatar = updated?.avatarUrl ? resolveAvatarUrl(updated.avatarUrl) : previewUrl;
+      setProfile((prev) => (prev ? { ...prev, avatar: resolvedAvatar } : prev));
       setMessage('Avatar updated successfully!');
     } catch (e) {
       logErr('❌ Avatar upload error', e);
       setMessage('Failed to update avatar. Please try again.');
     } finally {
-      setIsLoading(false);
+      setIsAvatarUploading(false);
       if (avatarInputRef.current) {
         avatarInputRef.current.value = '';
       }
@@ -230,7 +252,7 @@ const ProfilePage: React.FC = () => {
             // player-service expects { playerId, username, agentUserId? }
             playerId,
             username: me.username,
-          });
+          }, token);
         } catch (e) {
           logErr('⚠️ Failed to ensure player profile', e);
         }
@@ -240,7 +262,7 @@ const ProfilePage: React.FC = () => {
       let stats: any = {};
       if (!isAgent) {
         try {
-          const statsRes = await playerApi.getStats(String(playerId));
+          const statsRes = await playerApi.getStats(String(playerId), token);
           stats = statsRes?.data || {};
         } catch (e) {
           logErr('⚠️ Failed to load player stats', e);
@@ -256,7 +278,7 @@ const ProfilePage: React.FC = () => {
         username: me.username || '',
         email: me.email || '',
         phone: me.phoneNumber || '',
-        avatar: me.avatarUrl || '',
+        avatar: resolveAvatarUrl(me.avatarUrl || ''),
 
         level: Math.floor(ratingPoints / 100) + 1,
         experience: ratingPoints % 100,
@@ -505,7 +527,7 @@ const ProfilePage: React.FC = () => {
                 <Button
                   variant="outline"
                   onClick={() => router.push('/dashboard')}
-                  className="w-full min-h-[44px] border-white/15 text-white/70 hover:bg-white/10"
+                  className="w-full min-h-[44px] border-white/15 text-white hover:bg-white/10"
                 >
                   Back to Dashboard
                 </Button>
@@ -1027,6 +1049,22 @@ const ProfilePage: React.FC = () => {
             </TabsContent>
           </Tabs>
       </div>
+
+      <Dialog open={isAvatarUploading}>
+        <DialogContent className="bg-slate-950 border-white/10 text-white">
+          <DialogHeader>
+            <DialogTitle>Uploading avatar</DialogTitle>
+            <DialogDescription>Please wait while we save your image.</DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-3">
+            <Loader2 className="h-5 w-5 animate-spin text-emerald-300" />
+            <div>
+              <p className="text-sm font-medium">Uploading avatar</p>
+              <p className="text-xs text-white/60">Please wait while we save your image.</p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {message && (
         <div

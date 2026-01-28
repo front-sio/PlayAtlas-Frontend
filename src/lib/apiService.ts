@@ -235,8 +235,8 @@ export const authApi = {
 // -------------------- Player API (matches your player-service routes) --------------------
 export const playerApi = {
   // ✅ POST /player/ (create or update player)
-  createOrUpdatePlayer: async (data: any) =>
-    request('/player', { method: 'POST', body: data, json: true }),
+  createOrUpdatePlayer: async (data: any, token?: string) =>
+    request('/player', { method: 'POST', token, body: data, json: true }),
 
   // ✅ GET /player/:playerId/stats
   getStats: async (playerId: string, token?: string) => {
@@ -328,12 +328,13 @@ export const walletApi = {
 
 // -------------------- Tournament API (leave if your backend matches these routes) --------------------
 export const tournamentApi = {
-  getTournaments: async (page = 1, limit = 20, status?: string, clubId?: string) => {
+  getTournaments: async (page = 1, limit = 20, status?: string, clubId?: string, gameCategory?: string) => {
     const params = new URLSearchParams();
     params.set('page', String(page));
     params.set('limit', String(limit));
     if (status) params.set('status', status);
     if (clubId) params.set('clubId', clubId);
+    if (gameCategory) params.set('gameCategory', gameCategory);
     return request(`/tournament?${params.toString()}`, { method: 'GET' });
   },
 
@@ -645,9 +646,10 @@ export const adminApi = {
   getTournamentStats: async (token: string) =>
     request('/admin/tournaments/stats', { method: 'GET', token }),
 
-  getTournaments: async (token: string, status?: string, limit = 50, offset = 0) => {
+  getTournaments: async (token: string, status?: string, limit = 50, offset = 0, gameCategory?: string) => {
     const params = new URLSearchParams();
     if (status) params.set('status', status);
+    if (gameCategory) params.set('gameCategory', gameCategory);
     params.set('limit', String(limit));
     params.set('offset', String(offset));
     const query = params.toString() ? `?${params.toString()}` : '';
@@ -659,6 +661,12 @@ export const adminApi = {
 
   createTournament: async (token: string, data: any) =>
     request('/admin/tournaments', { method: 'POST', token, body: data, json: true }),
+
+  startTournament: async (token: string, tournamentId: string) =>
+    request(`/admin/tournaments/${encodeURIComponent(tournamentId)}/start`, {
+      method: 'POST',
+      token
+    }),
 
   cancelTournament: async (token: string, tournamentId: string, reason?: string) =>
     request(`/admin/tournaments/${encodeURIComponent(tournamentId)}/cancel`, {
@@ -833,10 +841,38 @@ export const matchmakingApi = {
     return request(`${base}${qs}`, { method: 'GET' });
   },
 
-  getPlayerMatchesMultiplayer: async (playerId: string, status?: string) => {
+  getPlayerMatchesMultiplayer: async (
+    playerId: string,
+    statusOrOptions?: string | {
+      status?: string;
+      scope?: string;
+      seasonId?: string;
+      page?: number;
+      limit?: number;
+    }
+  ) => {
     const base = `/matchmaking/multiplayer/player/${encodeURIComponent(playerId)}/matches`;
-    const qs = status ? `?status=${encodeURIComponent(status)}` : '';
-    return request(`${base}${qs}`, { method: 'GET' });
+    const params = new URLSearchParams();
+    if (typeof statusOrOptions === 'string') {
+      params.set('status', statusOrOptions);
+    } else if (statusOrOptions) {
+      if (statusOrOptions.status) params.set('status', statusOrOptions.status);
+      if (statusOrOptions.scope) params.set('scope', statusOrOptions.scope);
+      if (statusOrOptions.seasonId) params.set('seasonId', statusOrOptions.seasonId);
+      if (typeof statusOrOptions.page === 'number') params.set('page', String(statusOrOptions.page));
+      if (typeof statusOrOptions.limit === 'number') params.set('limit', String(statusOrOptions.limit));
+    }
+    const qs = params.toString();
+    return request(`${base}${qs ? `?${qs}` : ''}`, { method: 'GET' });
+  },
+
+  getPlayerMatchesAllSeasons: async (playerId: string, limit = 200) => {
+    const base = `/matchmaking/multiplayer/player/${encodeURIComponent(playerId)}/matches`;
+    const params = new URLSearchParams({
+      scope: 'all_seasons',
+      limit: String(limit)
+    });
+    return request(`${base}?${params.toString()}`, { method: 'GET' });
   },
 
   getMatch: async (matchId: string) =>
@@ -849,7 +885,18 @@ export const matchmakingApi = {
     request(`/matchmaking/season/${encodeURIComponent(seasonId)}/bracket`, { method: 'GET', token }),
 
   startMatch: async (matchId: string, data: any, token?: string) =>
-    request(`/matchmaking/matches/${encodeURIComponent(matchId)}/start`, { method: 'POST', token, body: data, json: true }),
+    request(`/matchmaking/match/${encodeURIComponent(matchId)}/start`, { method: 'POST', token, body: data, json: true }),
+
+  hostStartMatch: async (matchId: string, token?: string) =>
+    request(`/matchmaking/match/${encodeURIComponent(matchId)}/host/start`, { method: 'POST', token }),
+
+  hostVerifyMatch: async (matchId: string, token: string, bleNonce: string, accessToken?: string) =>
+    request(`/matchmaking/match/${encodeURIComponent(matchId)}/host/verify`, {
+      method: 'POST',
+      token: accessToken,
+      body: { token, bleNonce },
+      json: true
+    }),
 
   updateMatchResult: async (matchId: string, data: any, token?: string) =>
     request(`/matchmaking/match/${encodeURIComponent(matchId)}/result`, { method: 'PUT', token, body: data, json: true }),

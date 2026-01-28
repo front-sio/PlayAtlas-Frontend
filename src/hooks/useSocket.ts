@@ -30,13 +30,13 @@ export function useSocket(options: UseSocketOptions = {}) {
       auth: {
         token: token
       },
-      transports: ['polling', 'websocket'], // Start with polling, then upgrade
+      transports: ['polling'],
       reconnection: true,
       reconnectionDelay: reconnectDelay,
       reconnectionDelayMax: 10000,
       reconnectionAttempts: maxReconnectAttempts,
       timeout: 20000,
-      upgrade: true,
+      upgrade: false,
       rememberUpgrade: false,
       autoConnect: true,
       forceNew: false

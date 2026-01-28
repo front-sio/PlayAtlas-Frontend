@@ -16,6 +16,8 @@ type MatchmakingSocketEvents = {
   queue_error: { message: string };
   queue_timeout: { message: string };
   challenge_error: { message: string };
+  match_verification_qr: { matchId: string; token: string; expiresAt: string; bleNonce?: string };
+  match_verified: { matchId: string; verifiedAt: string };
 };
 
 class MatchmakingSocketService {
@@ -59,7 +61,8 @@ class MatchmakingSocketService {
 
     this.socket = io(connectionUrl, {
       path,
-      transports: ['polling', 'websocket'],
+      transports: ['polling'],
+      upgrade: false,
       reconnection: true,
       reconnectionDelay: this.reconnectDelay,
       reconnectionAttempts: this.maxReconnectAttempts,
@@ -133,6 +136,14 @@ class MatchmakingSocketService {
 
     this.socket.on('challenge:error', (data: MatchmakingSocketEvents['challenge_error']) => {
       this.emit('challenge_error', data);
+    });
+
+    this.socket.on('match:verification_qr', (data: MatchmakingSocketEvents['match_verification_qr']) => {
+      this.emit('match_verification_qr', data);
+    });
+
+    this.socket.on('match:verified', (data: MatchmakingSocketEvents['match_verified']) => {
+      this.emit('match_verified', data);
     });
 
     this.socket.on('error', (data: MatchmakingSocketEvents['error']) => {

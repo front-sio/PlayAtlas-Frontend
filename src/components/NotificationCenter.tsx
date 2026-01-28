@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Bell, X, Clock, Trophy, GamepadIcon, Users, Check } from 'lucide-react';
 import { useNotifications, RealtimeNotification } from '../lib/notificationContext';
 import { useRouter } from 'next/router';
+import { getGameRoute, normalizeGameCategory } from '@/lib/gameCategories';
 
 const NotificationIcon: React.FC<{ type: string; className?: string }> = ({ type, className = "w-4 h-4" }) => {
   switch (type) {
@@ -110,9 +111,8 @@ export const NotificationCenter: React.FC = () => {
     if (action === 'join_season' && notification.data.tournamentId) {
       router.push(`/tournaments/${notification.data.tournamentId}?season=${notification.data.seasonId}`);
     } else if (action === 'join_match' && notification.data.matchId) {
-      const matchType = notification.data.gameType || (notification.data.withAi ? 'with_ai' : null);
-      const basePath = matchType === 'with_ai' ? '/game/match/pc' : '/game/match';
-      router.push(`${basePath}/${notification.data.matchId}`);
+      const category = normalizeGameCategory(notification.data.gameCategory) || 'BILLIARDS';
+      router.push(getGameRoute(category, notification.data.matchId));
     }
     
     // Mark as read when action is taken

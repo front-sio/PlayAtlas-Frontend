@@ -17,6 +17,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AccessDenied } from '@/components/admin/AccessDenied';
 import { canCreateTournaments, canViewTournaments, canManageTournaments } from '@/lib/permissions';
+import { GAME_CATEGORY_OPTIONS, getGameCategoryLabel } from '@/lib/gameCategories';
 
 interface Tournament {
   tournamentId: string;
@@ -24,6 +25,7 @@ interface Tournament {
   entryFee: number;
   currentPlayers?: number;
   maxPlayers: number;
+  gameCategory?: string | null;
   status: string;
   stage?: string;
   startTime?: string;
@@ -64,6 +66,9 @@ interface Match {
   status: string;
   roundNumber?: number | null;
   scheduledTime?: string | null;
+  assignedHostPlayerUserId?: string | null;
+  verificationStatus?: string | null;
+  verifiedAt?: string | null;
 }
 
 interface TournamentOverview {
@@ -98,6 +103,8 @@ export default function AdminTournamentsPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [gameCategoryFilter, setGameCategoryFilter] = useState('all');
+  const [verificationFilter, setVerificationFilter] = useState('all');
   const [creating, setCreating] = useState(false);
   const [createForm, setCreateForm] = useState({
     clubId: '',
@@ -108,6 +115,7 @@ export default function AdminTournamentsPage() {
     startTime: '',
     seasonDuration: '',
     gameType: 'multiplayer',
+    gameCategory: 'BILLIARDS',
     aiDifficulty: '5',
   });
   const [aiDifficultyTouched, setAiDifficultyTouched] = useState(false);
@@ -133,7 +141,7 @@ export default function AdminTournamentsPage() {
   useEffect(() => {
     if (!canViewTournaments(role)) return;
     loadData();
-  }, [token, role, statusFilter]);
+  }, [token, role, statusFilter, gameCategoryFilter]);
 
   useEffect(() => {
     if (!token || !canCreateTournaments(role)) return;
@@ -184,8 +192,9 @@ export default function AdminTournamentsPage() {
     try {
       setLoading(true);
       const statusParam = statusFilter === 'all' ? undefined : statusFilter;
+      const categoryParam = gameCategoryFilter === 'all' ? undefined : gameCategoryFilter;
       const [listResult, statsResult] = await Promise.all([
-        token ? adminApi.getTournaments(token, statusParam, 50, 0) : Promise.resolve({ success: false }),
+        token ? adminApi.getTournaments(token, statusParam, 50, 0, categoryParam) : Promise.resolve({ success: false }),
         token ? adminApi.getTournamentStats(token) : Promise.resolve({ success: false }),
       ]);
 
@@ -325,7 +334,8 @@ export default function AdminTournamentsPage() {
         description: createForm.description,
         entryFee: Number(createForm.entryFee),
         maxPlayers: Number(createForm.maxPlayers),
-        gameType: createForm.gameType
+        gameType: createForm.gameType,
+        gameCategory: createForm.gameCategory
       };
       if (createForm.gameType === 'with_ai') {
         payload.maxPlayers = 2;
@@ -349,6 +359,7 @@ export default function AdminTournamentsPage() {
           startTime: '',
           seasonDuration: '',
           gameType: 'multiplayer',
+          gameCategory: 'BILLIARDS',
           aiDifficulty: '5',
         });
         setAiDifficultyTouched(false);
@@ -368,6 +379,7 @@ export default function AdminTournamentsPage() {
   }
 
   const canCreate = canCreateTournaments(role);
+  const selectedTournament = tournaments.find((t) => t.tournamentId === selectedTournamentId) || null;
   const isAiTournament = createForm.gameType === 'with_ai';
   const confirmTitle = confirmAction?.type === 'stop' ? 'Pause tournament?' : 'Resume tournament?';
   const confirmDescription =
@@ -537,6 +549,18 @@ export default function AdminTournamentsPage() {
               <option value="multiplayer">Multiplayer</option>
               <option value="with_ai">With AI</option>
             </select>
+            <select
+              value={createForm.gameCategory}
+              onChange={(event) => handleCreateChange('gameCategory', event.target.value)}
+              className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
+              required
+            >
+              {GAME_CATEGORY_OPTIONS.map((category) => (
+                <option key={category} value={category}>
+                  {getGameCategoryLabel(category)}
+                </option>
+              ))}
+            </select>
             {isAiTournament && (
               <input
                 value={createForm.aiDifficulty}
@@ -618,17 +642,31 @@ export default function AdminTournamentsPage() {
       <Card>
         <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <CardTitle>Tournaments</CardTitle>
-          <select
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value)}
-            className="w-full rounded border border-input bg-background px-3 py-2 text-sm md:w-48"
-          >
-            {['all', 'upcoming', 'active', 'stopped', 'completed', 'cancelled'].map((status) => (
-              <option key={status} value={status}>
-                {status.charAt(0).toUpperCase() + status.slice(1)}
-              </option>
-            ))}
-          </select>
+          <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row">
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+              className="w-full rounded border border-input bg-background px-3 py-2 text-sm md:w-44"
+            >
+              {['all', 'upcoming', 'active', 'stopped', 'completed', 'cancelled'].map((status) => (
+                <option key={status} value={status}>
+                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                </option>
+              ))}
+            </select>
+            <select
+              value={gameCategoryFilter}
+              onChange={(event) => setGameCategoryFilter(event.target.value)}
+              className="w-full rounded border border-input bg-background px-3 py-2 text-sm md:w-48"
+            >
+              <option value="all">All games</option>
+              {GAME_CATEGORY_OPTIONS.map((category) => (
+                <option key={category} value={category}>
+                  {getGameCategoryLabel(category)}
+                </option>
+              ))}
+            </select>
+          </div>
         </CardHeader>
         <CardContent>
           {error && (
@@ -653,6 +691,7 @@ export default function AdminTournamentsPage() {
                     <th className="px-3 py-2">Name</th>
                     <th className="px-3 py-2">Entry Fee</th>
                     <th className="px-3 py-2">Players</th>
+                    <th className="px-3 py-2">Game</th>
                     <th className="px-3 py-2">Status</th>
                     <th className="px-3 py-2">Details</th>
                     <th className="px-3 py-2">Action</th>
@@ -668,6 +707,9 @@ export default function AdminTournamentsPage() {
                       <td className="px-3 py-3">TSH {Number(tournament.entryFee).toLocaleString()}</td>
                       <td className="px-3 py-3">
                         {(tournament.currentPlayers ?? 0)}/{tournament.maxPlayers}
+                      </td>
+                      <td className="px-3 py-3">
+                        {getGameCategoryLabel(tournament.gameCategory || 'BILLIARDS')}
                       </td>
                       <td className="px-3 py-3">{tournament.status}</td>
                       <td className="px-3 py-3">
@@ -734,6 +776,21 @@ export default function AdminTournamentsPage() {
             <CardTitle>Tournament Details</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
+            {selectedTournament && (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="font-medium">{selectedTournament.name}</span>
+                  <span className="text-muted-foreground">
+                    {getGameCategoryLabel(selectedTournament.gameCategory || 'BILLIARDS')}
+                  </span>
+                </div>
+                {selectedTournament.gameCategory && selectedTournament.gameCategory !== 'BILLIARDS' && (
+                  <p className="mt-1 text-xs text-amber-600">
+                    Not playable yet. Only Billiards sessions are supported.
+                  </p>
+                )}
+              </div>
+            )}
             {overviewError && (
               <div className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
                 {overviewError}
@@ -793,6 +850,21 @@ export default function AdminTournamentsPage() {
 
                 <div>
                   <p className="text-sm font-semibold text-slate-900">Matches In Progress</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                    <span>Verification filter:</span>
+                    <select
+                      value={verificationFilter}
+                      onChange={(event) => setVerificationFilter(event.target.value)}
+                      className="rounded border border-slate-200 bg-white px-2 py-1 text-xs"
+                    >
+                      <option value="all">All</option>
+                      <option value="qr_issued">QR Issued</option>
+                      <option value="verified">Verified</option>
+                      <option value="expired">Expired</option>
+                      <option value="pending">Not Requested</option>
+                      <option value="stuck_qr">QR Issued &gt; 10 min</option>
+                    </select>
+                  </div>
                   <div className="mt-2 overflow-x-auto">
                     <table className="min-w-full text-sm">
                       <thead className="border-b text-left text-xs uppercase text-muted-foreground">
@@ -800,6 +872,8 @@ export default function AdminTournamentsPage() {
                           <th className="px-3 py-2">Match</th>
                           <th className="px-3 py-2">Season</th>
                           <th className="px-3 py-2">Players</th>
+                          <th className="px-3 py-2">Host</th>
+                          <th className="px-3 py-2">Verification</th>
                           <th className="px-3 py-2">Status</th>
                           <th className="px-3 py-2">Scheduled</th>
                         </tr>
@@ -807,11 +881,28 @@ export default function AdminTournamentsPage() {
                       <tbody>
                         {overview.matches
                           .filter((match) => ['active', 'in_progress', 'in-progress', 'ready', 'matched', 'scheduled'].includes(match.status))
+                          .filter((match) => {
+                            if (verificationFilter === 'all') return true;
+                            const status = String(match.verificationStatus || 'pending').toLowerCase();
+                            if (verificationFilter === 'stuck_qr') {
+                              if (status !== 'qr_issued') return false;
+                              if (!match.scheduledTime) return true;
+                              const ageMs = Date.now() - new Date(match.scheduledTime).getTime();
+                              return ageMs > 10 * 60 * 1000;
+                            }
+                            return status === verificationFilter;
+                          })
                           .map((match) => (
                             <tr key={match.matchId} className="border-b last:border-0">
                               <td className="px-3 py-3">{match.matchId}</td>
                               <td className="px-3 py-3">{match.seasonId || '—'}</td>
                               <td className="px-3 py-3">{match.player1Id} vs {match.player2Id}</td>
+                              <td className="px-3 py-3">
+                                {match.assignedHostPlayerUserId ? match.assignedHostPlayerUserId : '—'}
+                              </td>
+                              <td className="px-3 py-3">
+                                {match.verificationStatus || '—'}
+                              </td>
                               <td className="px-3 py-3">{match.status}</td>
                               <td className="px-3 py-3">
                                 {match.scheduledTime ? new Date(match.scheduledTime).toLocaleString() : '—'}

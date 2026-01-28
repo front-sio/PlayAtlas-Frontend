@@ -49,7 +49,8 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
     const connectionUrl = url || undefined;
     const newSocket = io(connectionUrl, {
       path,
-      transports: ['websocket', 'polling'],
+      transports: ['polling'],
+      upgrade: false,
       auth: {
         token: (session as any)?.accessToken
       }

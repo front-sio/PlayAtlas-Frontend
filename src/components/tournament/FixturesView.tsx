@@ -1,9 +1,11 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Clock, MapPin, Trophy, Users } from "lucide-react";
+import { Clock, Trophy, Users } from "lucide-react";
+import { getGameCategoryLabel, getGameRoute, normalizeGameCategory } from "@/lib/gameCategories";
 
 export interface Match {
   matchId: string;
@@ -19,11 +21,14 @@ export interface Match {
   
   status: string;
   scheduledStartAt?: string;
+  gameCategory?: string;
   
   assignedDeviceId?: string;
   assignedAgentId?: string;
   assignedAgentName?: string;
   assignedDeviceName?: string;
+  assignedHostPlayerUserId?: string;
+  verificationStatus?: string;
   
   isPlayerMatch: boolean;
   playerPosition?: number;
@@ -93,95 +98,112 @@ export function FixturesView({ fixtures }: { fixtures: FixturesPayload }) {
             
             <div className="grid gap-4">
               {/* Player matches first */}
-              {playerMatches.map((match) => (
-                <Card 
-                  key={match.matchId} 
-                  className="bg-blue-600/20 border-blue-500/30"
-                >
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <Badge className="bg-blue-600">Your Match</Badge>
-                        <span className="text-white font-medium">
-                          Match #{match.matchNumber}
-                        </span>
-                        {match.groupLabel && (
-                          <Badge variant="outline" className="text-white/70 border-white/30">
-                            Group {match.groupLabel}
-                          </Badge>
-                        )}
-                      </div>
-                      
-                      <Badge className={getStatusColor(match.status)}>
-                        {getStatusText(match.status)}
-                      </Badge>
-                    </div>
-                    
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4 text-sm text-white/80">
-                        {match.scheduledStartAt && (
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-4 w-4" />
-                            {new Date(match.scheduledStartAt).toLocaleString()}
-                          </div>
-                        )}
-                        
-                        {match.assignedDeviceId && (
-                          <div className="flex items-center gap-1">
-                            <MapPin className="h-4 w-4" />
-                            Device {match.assignedDeviceId.slice(-1)}
-                          </div>
-                        )}
-                      </div>
-                      
-                      {match.status === 'COMPLETED' && match.winnerId && (
-                        <div className="text-sm text-green-400">
-                          Score: {match.player1Score}-{match.player2Score}
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-              
-              {/* Other matches */}
-              <div className="grid md:grid-cols-2 gap-4">
-                {otherMatches.map((match) => (
+              {playerMatches.map((match) => {
+                const category = normalizeGameCategory(match.gameCategory) || 'BILLIARDS';
+                return (
+                  <Link key={match.matchId} href={getGameRoute(category, match.matchId)} className="block">
                   <Card 
-                    key={match.matchId} 
-                    className="bg-black/20 border-white/10"
+                    className="bg-blue-600/20 border-blue-500/30"
                   >
-                    <CardContent className="p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-white/70 text-sm">
-                          Match #{match.matchNumber}
-                          {match.groupLabel && ` - Group ${match.groupLabel}`}
-                        </span>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Badge className="bg-blue-600">Your Match</Badge>
+                          <Badge variant="outline" className="text-white/70 border-white/30">
+                            {getGameCategoryLabel(category)}
+                          </Badge>
+                          <span className="text-white font-medium">
+                            Match #{match.matchNumber}
+                          </span>
+                          {match.groupLabel && (
+                            <Badge variant="outline" className="text-white/70 border-white/30">
+                              Group {match.groupLabel}
+                            </Badge>
+                          )}
+                        </div>
                         
-                        <Badge 
-                          variant="outline" 
-                          className={`text-xs ${getStatusColor(match.status)} border-none`}
-                        >
+                        <Badge className={getStatusColor(match.status)}>
                           {getStatusText(match.status)}
                         </Badge>
                       </div>
                       
-                      <div className="flex items-center justify-between text-xs text-white/60">
-                        {match.scheduledStartAt && (
-                          <span>
-                            {new Date(match.scheduledStartAt).toLocaleTimeString()}
-                          </span>
-                        )}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4 text-sm text-white/80">
+                          {match.scheduledStartAt && (
+                            <div className="flex items-center gap-1">
+                              <Clock className="h-4 w-4" />
+                              {new Date(match.scheduledStartAt).toLocaleString()}
+                            </div>
+                          )}
+                          
+                          <div className="flex items-center gap-2">
+                            {match.assignedHostPlayerUserId && (
+                              <span className="rounded-full border border-white/20 px-2 py-0.5 text-xs">
+                                Host: {match.assignedHostPlayerUserId === match.player1Id ? 'Player 1' : 'Player 2'}
+                              </span>
+                            )}
+                            {match.verificationStatus && (
+                              <span className="rounded-full border border-white/20 px-2 py-0.5 text-xs">
+                                {match.verificationStatus.toUpperCase()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                         
-                        {match.status === 'COMPLETED' && (
-                          <span>
-                            {match.player1Score}-{match.player2Score}
-                          </span>
+                        {match.status === 'COMPLETED' && match.winnerId && (
+                          <div className="text-sm text-green-400">
+                            Score: {match.player1Score}-{match.player2Score}
+                          </div>
                         )}
                       </div>
                     </CardContent>
                   </Card>
-                ))}
+                </Link>
+                );
+              })}
+              
+              {/* Other matches */}
+              <div className="grid md:grid-cols-2 gap-4">
+                {otherMatches.map((match) => {
+                  const category = normalizeGameCategory(match.gameCategory) || 'BILLIARDS';
+                  return (
+                    <Link key={match.matchId} href={getGameRoute(category, match.matchId)} className="block">
+                    <Card 
+                      className="bg-black/20 border-white/10"
+                    >
+                      <CardContent className="p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-white/70 text-sm">
+                            Match #{match.matchNumber}
+                            {match.groupLabel && ` - Group ${match.groupLabel}`}
+                          </span>
+                          
+                          <Badge 
+                            variant="outline" 
+                            className={`text-xs ${getStatusColor(match.status)} border-none`}
+                          >
+                            {getStatusText(match.status)}
+                          </Badge>
+                        </div>
+                        
+                        <div className="flex items-center justify-between text-xs text-white/60">
+                          {match.scheduledStartAt && (
+                            <span>
+                              {new Date(match.scheduledStartAt).toLocaleTimeString()}
+                            </span>
+                          )}
+                          
+                          {match.status === 'COMPLETED' && (
+                            <span>
+                              {match.player1Score}-{match.player2Score}
+                            </span>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                  );
+                })}
               </div>
             </div>
           </div>

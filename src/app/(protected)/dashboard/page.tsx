@@ -150,7 +150,7 @@ const DashboardPage: React.FC = () => {
         if (status === 404 && !profileEnsuredRef.current && fallbackUsername) {
           try {
             profileEnsuredRef.current = true;
-            await playerApi.createOrUpdatePlayer({ playerId, username: fallbackUsername });
+            await playerApi.createOrUpdatePlayer({ playerId, username: fallbackUsername }, accessToken);
             if (typeof window !== 'undefined' && !sessionStorage.getItem('playerProfileCreatedToast')) {
               sessionStorage.setItem('playerProfileCreatedToast', 'true');
               toast({
@@ -277,7 +277,7 @@ const DashboardPage: React.FC = () => {
       if (message.includes('404') && !profileEnsuredRef.current && playerId && fallbackUsername) {
         try {
           profileEnsuredRef.current = true;
-          await playerApi.createOrUpdatePlayer({ playerId, username: fallbackUsername });
+          await playerApi.createOrUpdatePlayer({ playerId, username: fallbackUsername }, accessToken);
           if (typeof window !== 'undefined' && !sessionStorage.getItem('playerProfileCreatedToast')) {
             sessionStorage.setItem('playerProfileCreatedToast', 'true');
             toast({

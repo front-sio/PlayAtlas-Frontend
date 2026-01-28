@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { Eye, EyeOff, User, Mail, Phone, Lock, UserCheck } from 'lucide-react';
+import { GAME_CATEGORY_OPTIONS, getGameCategoryLabel, normalizeGameCategory } from '@/lib/gameCategories';
 
 interface AgentProfile {
   agentId: string;
@@ -43,7 +44,7 @@ interface AgentPayout {
   matchesCompleted: number;
 }
 
-interface AssignedMatch {
+interface ClubMatch {
   matchId: string;
   tournamentId: string;
   seasonId?: string | null;
@@ -52,6 +53,9 @@ interface AssignedMatch {
   status: string;
   scheduledTime?: string | null;
   scheduledStartAt?: string | null;
+  assignedHostPlayerUserId?: string | null;
+  verificationStatus?: string | null;
+  gameCategory?: string | null;
 }
 
 const isAgentRole = (role?: string) => ['agent'].includes((role || '').toLowerCase());
@@ -65,8 +69,9 @@ export default function AgentPage() {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [players, setPlayers] = useState<AgentPlayer[]>([]);
   const [earnings, setEarnings] = useState<AgentPayout[]>([]);
-  const [matches, setMatches] = useState<AssignedMatch[]>([]);
+  const [matches, setMatches] = useState<ClubMatch[]>([]);
   const [matchesLoading, setMatchesLoading] = useState(false);
+  const [matchCategoryFilter, setMatchCategoryFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [registering, setRegistering] = useState(false);
   const [error, setError] = useState('');
@@ -91,6 +96,13 @@ export default function AgentPage() {
     () => earnings.filter((p) => p.status?.toLowerCase() !== 'paid').reduce((sum, payout) => sum + Number(payout.totalAmount || 0), 0),
     [earnings]
   );
+  const filteredMatches = useMemo(() => {
+    if (matchCategoryFilter === 'all') return matches;
+    return matches.filter((match) => {
+      const category = normalizeGameCategory(match.gameCategory) || 'BILLIARDS';
+      return category === matchCategoryFilter;
+    });
+  }, [matches, matchCategoryFilter]);
 
   useEffect(() => {
     if (!token || !isAgentRole(role)) return;
@@ -101,6 +113,7 @@ export default function AgentPage() {
     try {
       setLoading(true);
       setError('');
+      let playerList: AgentPlayer[] = [];
 
       try {
         const profileResult = await agentApi.getProfile(token);
@@ -120,8 +133,9 @@ export default function AgentPage() {
 
       try {
         const playersResult = await agentApi.listPlayers(token);
+        playerList = playersResult.success && playersResult.data ? (playersResult.data as AgentPlayer[]) : [];
         if (playersResult.success && playersResult.data) {
-          setPlayers(playersResult.data as AgentPlayer[]);
+          setPlayers(playerList);
         } else {
           setPlayers([]);
           setError((prev) => prev || playersResult.error || 'Failed to load players');
@@ -146,14 +160,25 @@ export default function AgentPage() {
 
       try {
         setMatchesLoading(true);
-        const matchesResult = await agentApi.listMatches(token);
-        const payload = (matchesResult.data as any) || null;
-        const matchList = Array.isArray(payload) ? payload : payload?.matches || [];
-        if (matchesResult.success) {
-          setMatches(matchList as AssignedMatch[]);
-        } else {
+        const playerIds = playerList.map((player) => player.playerId);
+        if (playerIds.length === 0) {
           setMatches([]);
-          setError((prev) => prev || matchesResult.error || 'Failed to load matches');
+        } else {
+          const responses = await Promise.all(
+            playerIds.map((playerId) =>
+              matchmakingApi.getPlayerMatchesMultiplayer(playerId).catch(() => null)
+            )
+          );
+          const matchMap = new Map<string, ClubMatch>();
+          responses.forEach((res) => {
+            const list = (res?.data || []) as ClubMatch[];
+            list.forEach((match) => {
+              if (!matchMap.has(match.matchId)) {
+                matchMap.set(match.matchId, match);
+              }
+            });
+          });
+          setMatches(Array.from(matchMap.values()).slice(0, 100));
         }
       } catch (err) {
         setMatches([]);
@@ -228,27 +253,6 @@ export default function AgentPage() {
       setError(err instanceof Error ? err.message : 'Failed to register player');
     } finally {
       setRegistering(false);
-    }
-  };
-
-  const handleStartMatch = async (match: AssignedMatch) => {
-    if (!token) return;
-    try {
-      const result = await matchmakingApi.startMatch(
-        match.matchId,
-        { playerId: match.player1Id },
-        token
-      );
-      if (result.success) {
-        const redirectUrl = (result.data as any)?.redirectUrl || (result as any)?.redirectUrl;
-        if (redirectUrl) {
-          window.location.assign(redirectUrl);
-        }
-      } else {
-        setError(result.error || 'Failed to start match');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start match');
     }
   };
 
@@ -360,7 +364,7 @@ export default function AgentPage() {
                   <p className="text-3xl font-semibold">{players.length}</p>
                   <p className="text-sm text-white/70 mt-1">Registered by you</p>
                   <div className="mt-3 space-y-1 text-xs text-white/60">
-                    <p>Keep hosting matches to increase your revenue share.</p>
+                    <p>Register more players to grow club revenue.</p>
                   </div>
                 </CardContent>
               </Card>
@@ -383,22 +387,43 @@ export default function AgentPage() {
           <TabsContent value="matches">
             <Card className="bg-white/5 border-white/10">
               <CardHeader>
-                <CardTitle>Assigned Matches</CardTitle>
+                <CardTitle>Matches Played by Your Players</CardTitle>
               </CardHeader>
               <CardContent>
+                <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-white/70">
+                    Verification success and hosting activity across your club players.
+                  </p>
+                  <Select value={matchCategoryFilter} onValueChange={setMatchCategoryFilter}>
+                    <SelectTrigger className="w-full bg-white/10 border-white/20 text-white sm:w-52">
+                      <SelectValue placeholder="All games" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All games</SelectItem>
+                      {GAME_CATEGORY_OPTIONS.map((category) => (
+                        <SelectItem key={category} value={category}>
+                          {getGameCategoryLabel(category)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 {matchesLoading ? (
                   <p className="text-sm text-white/70">Loading matches...</p>
-                ) : matches.length === 0 ? (
-                  <p className="text-sm text-white/70">No assigned matches.</p>
+                ) : filteredMatches.length === 0 ? (
+                  <p className="text-sm text-white/70">No recent matches yet.</p>
                 ) : (
                   <div className="space-y-3">
-                    {matches.map((match) => (
+                    {filteredMatches.map((match) => {
+                      const category = normalizeGameCategory(match.gameCategory) || 'BILLIARDS';
+                      return (
                       <div
                         key={match.matchId}
                         className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 p-4 sm:flex-row sm:items-center sm:justify-between"
                       >
                         <div className="space-y-1 text-sm text-white/80">
                           <p className="font-semibold">Match {match.matchId.slice(0, 8)}</p>
+                          <p>Game: {getGameCategoryLabel(category)}</p>
                           <p>Status: {match.status}</p>
                           <p>
                             Scheduled:{' '}
@@ -406,22 +431,15 @@ export default function AgentPage() {
                               ? new Date(match.scheduledStartAt || match.scheduledTime || '').toLocaleString()
                               : 'TBD'}
                           </p>
+                          <p>Host: {match.assignedHostPlayerUserId ? match.assignedHostPlayerUserId : 'TBD'}</p>
+                          <p>Verification: {match.verificationStatus || 'pending'}</p>
                         </div>
-                        {(() => {
-                          const status = String(match.status || '').toLowerCase();
-                          const canStart = status === 'ready' || status === 'scheduled';
-                          return (
-                            <Button
-                              onClick={() => handleStartMatch(match)}
-                              disabled={!canStart}
-                              className="w-full border-white/20 text-white hover:bg-white/10 sm:w-auto"
-                            >
-                              {canStart ? 'Start Match' : 'Match Unavailable'}
-                            </Button>
-                          );
-                        })()}
+                        <div className="text-xs text-white/60">
+                          Matches are hosted by players. Track outcomes and verification here.
+                        </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>

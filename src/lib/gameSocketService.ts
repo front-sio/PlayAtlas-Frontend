@@ -104,7 +104,8 @@ class GameSocketService {
 
     this.socket = io(connectionUrl, {
       path,
-      transports: ['websocket', 'polling'],
+      transports: ['polling'],
+      upgrade: false,
       reconnection: true,
       reconnectionDelay: this.reconnectDelay,
       reconnectionAttempts: this.maxReconnectAttempts,

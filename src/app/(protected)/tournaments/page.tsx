@@ -14,11 +14,13 @@ import { useSession } from 'next-auth/react';
 import { PageLoader } from '@/components/ui/page-loader';
 import { io, Socket } from 'socket.io-client';
 import { normalizeSocketTarget } from '@/lib/socket';
+import { GAME_CATEGORY_OPTIONS, getGameCategoryLabel, normalizeGameCategory } from '@/lib/gameCategories';
 
 interface Tournament {
   tournamentId: string;
   name: string;
   description?: string;
+  gameCategory?: string | null;
   entryFee: number;
   maxPlayers: number;
   currentPlayers: number;
@@ -66,6 +68,7 @@ const TournamentsPage: React.FC = () => {
   const [selectedType, setSelectedType] = useState<string>('ALL');
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
+  const [selectedGameCategory, setSelectedGameCategory] = useState<string>('ALL');
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [seasonsByTournament, setSeasonsByTournament] = useState<Record<string, Season[]>>({});
   const [loadingSeasons, setLoadingSeasons] = useState<Record<string, boolean>>({});
@@ -123,7 +126,7 @@ const TournamentsPage: React.FC = () => {
               await playerApi.createOrUpdatePlayer({
                 playerId,
                 username: (session?.user as any)?.username
-              });
+              }, accessToken);
               const retry = await playerApi.getStats(playerId, accessToken);
               clubId = (retry?.data as any)?.clubId || null;
               setPlayerClubId(clubId);
@@ -194,8 +197,15 @@ const TournamentsPage: React.FC = () => {
       filtered = filtered.filter(tournament => tournament.status === selectedStatus.toLowerCase());
     }
 
+    if (selectedGameCategory !== 'ALL') {
+      filtered = filtered.filter((tournament) => {
+        const category = normalizeGameCategory(tournament.gameCategory) || 'BILLIARDS';
+        return category === selectedGameCategory;
+      });
+    }
+
     setFilteredTournaments(filtered);
-  }, [searchTerm, selectedType, selectedDifficulty, selectedStatus, tournaments]);
+  }, [searchTerm, selectedType, selectedDifficulty, selectedStatus, selectedGameCategory, tournaments]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -242,7 +252,8 @@ const TournamentsPage: React.FC = () => {
     const s = io(connectionUrl, {
       path: socketTarget.path,
       auth: { token },
-      transports: ['websocket'],
+      transports: ['polling'],
+      upgrade: false,
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000
@@ -476,6 +487,18 @@ const TournamentsPage: React.FC = () => {
                 <option value="upcoming">Upcoming</option>
                 <option value="completed">Completed</option>
               </select>
+              <select
+                value={selectedGameCategory}
+                onChange={(e) => setSelectedGameCategory(e.target.value)}
+                className="px-4 py-2 bg-white/5 border border-white/10 text-white rounded-lg"
+              >
+                <option value="ALL">All Games</option>
+                {GAME_CATEGORY_OPTIONS.map((category) => (
+                  <option key={category} value={category}>
+                    {getGameCategoryLabel(category)}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         </section>
@@ -489,6 +512,9 @@ const TournamentsPage: React.FC = () => {
               <div className="flex items-start justify-between">
                 <Badge className="bg-emerald-500/15 text-emerald-200 border-emerald-500/30">
                   {getStatusLabel(tournament.status)}
+                </Badge>
+                <Badge variant="outline" className="border-white/20 text-white/70">
+                  {getGameCategoryLabel(normalizeGameCategory(tournament.gameCategory) || 'BILLIARDS')}
                 </Badge>
                 <span className="text-xs text-white/50">
                   {tournament.startTime ? new Date(tournament.startTime).toLocaleDateString() : 'Rolling'}

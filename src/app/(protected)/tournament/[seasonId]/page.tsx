@@ -145,6 +145,12 @@ export default function TournamentGamePage() {
 
   const nextMatch: Match | null = getNextMatch();
   const seasonLabel = leaderboard?.seasonId?.slice(-4) || (seasonId ? seasonId.slice(-4) : '—');
+  const getHostLabel = (match?: Match | null) => {
+    if (!match?.assignedHostPlayerUserId) return 'Host TBD';
+    if (match.assignedHostPlayerUserId === match.player1Id) return 'Host: Player 1';
+    if (match.assignedHostPlayerUserId === match.player2Id) return 'Host: Player 2';
+    return 'Host TBD';
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950">
@@ -213,7 +219,7 @@ export default function TournamentGamePage() {
                       </div>
                       <div className="flex items-center gap-1">
                         <MapPin className="h-3 w-3" />
-                        Device {nextMatch?.assignedDeviceId?.slice(-1) || 'TBD'}
+                        {getHostLabel(nextMatch)}
                       </div>
                       <div className="flex items-center gap-1">
                         <Target className="h-3 w-3" />

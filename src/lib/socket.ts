@@ -12,7 +12,13 @@ const trimUrl = (value: string) =>
     .replace(/\/+$/, '');
 
 export function normalizeSocketTarget(rawUrl?: string): SocketTarget {
-  const baseUrl = (rawUrl ?? process.env.NEXT_PUBLIC_ADMIN_WS_URL ?? '').trim();
+  const baseUrl = (
+    rawUrl ??
+    process.env.NEXT_PUBLIC_API_URL ??
+    process.env.NEXT_PUBLIC_API_GATEWAY_URL ??
+    process.env.NEXT_PUBLIC_ADMIN_WS_URL ??
+    ''
+  ).trim();
   if (!baseUrl) {
     return { url: '', path: SOCKET_IO_PATH };
   }
