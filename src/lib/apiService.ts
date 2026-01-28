@@ -276,7 +276,7 @@ export const walletApi = {
   },
 
   requestDeposit: async (token: string, data: any) =>
-    request('/wallet/deposit/request', { method: 'POST', token, body: data, json: true }),
+    request('/payment/deposit/initiate', { method: 'POST', token, body: data, json: true }),
 
   requestPayout: async (token: string, data: any) =>
     request('/payment/withdrawal/initiate', { method: 'POST', token, body: data, json: true }),

@@ -840,7 +840,7 @@ const WalletPage: React.FC = () => {
       try {
         const normalized = normalizePhoneNumber(trimmed);
         const lookupResponse = await fetch(
-          `${apiBase}/wallet/transfer/lookup/phone/${encodeURIComponent(normalized)}`,
+          `${apiBase}/payment/transfer/lookup/phone/${encodeURIComponent(normalized)}`,
           {
             method: 'GET',
             headers: { 'Authorization': `Bearer ${token}` }
