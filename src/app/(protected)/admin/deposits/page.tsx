@@ -81,7 +81,29 @@ export default function AdminDepositsPage() {
       const result = await paymentApi.getAdminTransactions(token, 'deposit');
       if (result.success && result.data) {
         const data = result.data as any;
-        setDeposits(data.transactions || data.data?.transactions || data || []);
+        const items = data.transactions || data.data?.transactions || data || [];
+        const mapped = Array.isArray(items)
+          ? items.map((tx: any) => ({
+              depositId: tx.referenceId || tx.depositId || tx.id || tx.transactionId,
+              referenceNumber: tx.referenceNumber,
+              amount: tx.amount,
+              fee: tx.fee,
+              totalAmount: tx.totalAmount,
+              provider: tx.provider,
+              phoneNumber: tx.phoneNumber || tx.metadata?.phoneNumber,
+              status: tx.status,
+              createdAt: tx.createdAt,
+              completedAt: tx.completedAt,
+              userId: tx.userId,
+              externalReference: tx.externalReference,
+              providerTid: tx.providerTid,
+              transactionMessage: tx.transactionMessage,
+              failureReason: tx.failureReason,
+              metadata: tx.metadata,
+              callbackData: tx.callbackData
+            }))
+          : [];
+        setDeposits(mapped);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load deposits');
@@ -103,10 +125,9 @@ export default function AdminDepositsPage() {
   const displayStatus = (status: string) => {
     const normalized = String(status || '').toLowerCase();
     if (['completed', 'approved'].includes(normalized)) return 'Successful';
-    if (['pending_approval'].includes(normalized)) return 'Waiting Approval';
-    if (['pending_payment'].includes(normalized)) return 'Waiting Confirmation';
     if (['pending', 'processing'].includes(normalized)) return 'Processing';
-    if (['rejected', 'cancelled', 'failed'].includes(normalized)) return 'Failed';
+    if (['cancelled', 'canceled'].includes(normalized)) return 'Cancelled';
+    if (['rejected', 'failed'].includes(normalized)) return 'Failed';
     // Convert underscores to spaces and capitalize each word
     return normalized.split('_').map(word => 
       word.charAt(0).toUpperCase() + word.slice(1)
@@ -244,7 +265,7 @@ export default function AdminDepositsPage() {
       mobilePriority: 'high' as const,
       render: (value) => {
         const status = String(value).toLowerCase();
-        const isPending = ['pending', 'pending_approval', 'pending_payment'].includes(status);
+        const isPending = ['pending'].includes(status);
         
         return (
           <div className="flex items-center gap-2">
@@ -437,7 +458,7 @@ export default function AdminDepositsPage() {
               
               {/* Action Buttons */}
               {selectedDeposit && 
-                ['pending', 'pending_approval', 'pending_payment'].includes(selectedDeposit.status?.toLowerCase()) && 
+                ['pending'].includes(selectedDeposit.status?.toLowerCase()) && 
                 selectedDeposit.transactionMessage && (
                 <div className="flex flex-col sm:flex-row gap-3 pt-4">
                   <Button
@@ -468,7 +489,7 @@ export default function AdminDepositsPage() {
               
               {/* Show message if no transaction message from provider */}
               {selectedDeposit && 
-                ['pending', 'pending_approval', 'pending_payment'].includes(selectedDeposit.status?.toLowerCase()) && 
+                ['pending'].includes(selectedDeposit.status?.toLowerCase()) && 
                 !selectedDeposit.transactionMessage && (
                 <div className="pt-4 text-center">
                   <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-3">

@@ -18,7 +18,19 @@ type PaymentStatus = string;
 
 type PaymentTransaction = {
   id: string;
-  type: 'deposit' | 'withdrawal' | 'prize' | 'entry_fee' | 'transaction_fee' | 'bonus' | 'refund' | string;
+  type:
+    | 'deposit'
+    | 'withdrawal'
+    | 'transfer'
+    | 'transfer_sent'
+    | 'transfer_received'
+    | 'entry_fee'
+    | 'payout_player'
+    | 'payout_agent'
+    | 'platform_fee'
+    | 'adjustment'
+    | 'refund'
+    | string;
   referenceNumber?: string;
   amount?: number;
   fee?: number;
@@ -72,10 +84,9 @@ const isFinanceOfficer = (role?: string) =>
 const statusLabel = (status?: string) => {
   const normalized = String(status || '').toLowerCase();
   if (['completed', 'approved'].includes(normalized)) return 'Successful';
-  if (['pending_approval'].includes(normalized)) return 'Waiting Approval';
-  if (['pending_payment'].includes(normalized)) return 'Waiting Confirmation';
   if (['pending', 'processing'].includes(normalized)) return 'Processing';
-  if (['rejected', 'cancelled', 'failed'].includes(normalized)) return 'Failed';
+  if (['cancelled', 'canceled'].includes(normalized)) return 'Cancelled';
+  if (['rejected', 'failed'].includes(normalized)) return 'Failed';
   return normalized
     .split('_')
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
@@ -87,21 +98,18 @@ const statusBadge = (status?: string) => {
   if (['completed', 'approved'].includes(normalized)) {
     return <Badge className="bg-emerald-100 text-emerald-700">Successful</Badge>;
   }
-  if (['pending_approval'].includes(normalized)) {
-    return <Badge className="bg-amber-100 text-amber-700">Waiting Approval</Badge>;
-  }
-  if (['pending_payment'].includes(normalized)) {
-    return <Badge className="bg-sky-100 text-sky-700">Waiting Confirmation</Badge>;
-  }
   if (['pending', 'processing'].includes(normalized)) {
     return <Badge className="bg-slate-100 text-slate-700">Processing</Badge>;
+  }
+  if (['cancelled', 'canceled'].includes(normalized)) {
+    return <Badge className="bg-amber-100 text-amber-700">Cancelled</Badge>;
   }
   return <Badge className="bg-rose-100 text-rose-700">Failed</Badge>;
 };
 
 const canApprove = (tx: PaymentTransaction) => {
   const normalized = String(tx.status || '').toLowerCase();
-  const isPending = ['pending', 'pending_approval', 'pending_payment'].includes(normalized);
+  const isPending = ['pending'].includes(normalized);
   
   // For deposits: need pending status AND transaction message from player
   if (tx.type === 'deposit') {
@@ -114,7 +122,7 @@ const canApprove = (tx: PaymentTransaction) => {
 
 const canReject = (tx: PaymentTransaction) => {
   const normalized = String(tx.status || '').toLowerCase();
-  const isPending = ['pending', 'pending_approval', 'pending_payment'].includes(normalized);
+  const isPending = ['pending'].includes(normalized);
   
   if (!isPending) return false;
   
@@ -238,7 +246,7 @@ export function PaymentsDashboard({ title, subtitle }: { title: string; subtitle
     
     // Filter out deposits and withdrawals if 'other' tab is selected
     if (type === 'other') {
-      items = items.filter((tx: PaymentTransaction) => 
+      items = items.filter((tx: PaymentTransaction) =>
         !['deposit', 'withdrawal'].includes(tx.type)
       );
     }
@@ -660,7 +668,7 @@ export function PaymentsDashboard({ title, subtitle }: { title: string; subtitle
                   onChange={(event) => setStatusFilter(event.target.value)}
                   className="flex-1 sm:flex-none rounded border border-input bg-background px-3 py-2 text-sm min-w-0"
                 >
-                  {['all', 'pending_approval', 'pending', 'pending_payment', 'completed', 'approved', 'failed', 'rejected', 'cancelled'].map((status) => (
+                  {['all', 'pending', 'completed', 'failed', 'cancelled'].map((status) => (
                     <option key={status} value={status}>
                       {statusLabel(status)}
                     </option>
@@ -829,19 +837,27 @@ export function PaymentsDashboard({ title, subtitle }: { title: string; subtitle
                       mobilePriority: 'high',
                       render: (type) => (
                         <Badge className={
-                          type === 'deposit' ? 'bg-emerald-100 text-emerald-700' : 
+                          type === 'deposit' ? 'bg-emerald-100 text-emerald-700' :
                           type === 'withdrawal' ? 'bg-indigo-100 text-indigo-700' :
-                          type === 'prize' ? 'bg-yellow-100 text-yellow-700' :
                           type === 'entry_fee' ? 'bg-purple-100 text-purple-700' :
-                          type === 'transaction_fee' ? 'bg-gray-100 text-gray-700' :
-                          type === 'bonus' ? 'bg-green-100 text-green-700' :
-                          type === 'refund' ? 'bg-blue-100 text-blue-700' :
+                          type === 'payout_player' ? 'bg-yellow-100 text-yellow-700' :
+                          type === 'payout_agent' ? 'bg-green-100 text-green-700' :
+                          type === 'platform_fee' ? 'bg-gray-100 text-gray-700' :
+                          type === 'transfer' || type === 'transfer_sent' || type === 'transfer_received' ? 'bg-blue-100 text-blue-700' :
+                          type === 'adjustment' ? 'bg-amber-100 text-amber-700' :
+                          type === 'refund' ? 'bg-rose-100 text-rose-700' :
                           'bg-slate-100 text-slate-700'
                         }>
-                          {type === 'withdrawal' ? 'Cashout' : 
+                          {type === 'withdrawal' ? 'Cashout' :
                            type === 'deposit' ? 'Deposit' :
                            type === 'entry_fee' ? 'Entry Fee' :
-                           type === 'transaction_fee' ? 'Transaction Fee' :
+                           type === 'payout_player' ? 'Player Payout' :
+                           type === 'payout_agent' ? 'Agent Payout' :
+                           type === 'platform_fee' ? 'Platform Fee' :
+                           type === 'transfer' ? 'Transfer' :
+                           type === 'transfer_sent' ? 'Transfer Sent' :
+                           type === 'transfer_received' ? 'Transfer Received' :
+                           type === 'adjustment' ? 'Adjustment' :
                            type?.charAt(0).toUpperCase() + type?.slice(1).replace('_', ' ') || 'Unknown'}
                         </Badge>
                       )
@@ -860,12 +876,13 @@ export function PaymentsDashboard({ title, subtitle }: { title: string; subtitle
                       render: (description, tx) => (
                         <div className="max-w-xs">
                           <div className="truncate">
-                            {description || 
-                             (tx.type === 'prize' ? 'Tournament/Game Prize' : 
+                            {description ||
+                             (tx.type === 'payout_player' ? 'Player Payout' :
+                              tx.type === 'payout_agent' ? 'Agent Payout' :
                               tx.type === 'entry_fee' ? 'Tournament Entry Fee' :
-                              tx.type === 'transaction_fee' ? 'System Transaction Fee' :
-                              tx.type === 'bonus' ? 'User Bonus' :
-                              tx.type === 'refund' ? 'Payment Refund' : 
+                              tx.type === 'platform_fee' ? 'Platform Fee' :
+                              tx.type === 'adjustment' ? 'Balance Adjustment' :
+                              tx.type === 'refund' ? 'Payment Refund' :
                               tx.provider || '—')}
                           </div>
                           {/* Show message status for mobile debugging */}
